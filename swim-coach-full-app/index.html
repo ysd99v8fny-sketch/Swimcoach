@@ -23,10 +23,9 @@
   <!-- Tailwind (play CDN — fine for a single-user personal app) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React 18 + Babel standalone (compiles JSX in the browser, no build step) -->
+  <!-- React 18 (precompiled app.js — no in-browser JSX transform) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
     html, body { background: #0B1F2E; margin: 0; }
@@ -38,7 +37,7 @@
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="react" src="app.jsx"></script>
+  <script src="app.js"></script>
 
   <script>
     if ("serviceWorker" in navigator) {

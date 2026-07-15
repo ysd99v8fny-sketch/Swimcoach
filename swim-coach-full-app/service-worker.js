@@ -1,8 +1,8 @@
-const CACHE_NAME = "swimcoach-v1";
+const CACHE_NAME = "swimcoach-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./app.jsx",
+  "./app.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
