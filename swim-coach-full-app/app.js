@@ -583,7 +583,7 @@ function ZoneDistribution({ sessions, paceTargets }) {
                 return null;
             return React.createElement("div", { key: z, style: { width: `${pct}%`, background: ZONE_COLORS[z] }, title: `${z}: ${pct.toFixed(0)}%` });
         })),
-        React.createElement("div", { className: "grid grid-cols-2 gap-2 mt-3" }, NOTATION_HELP.map((z) => {
+        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3" }, NOTATION_HELP.map((z) => {
             const pct = (totals[z] / totalMeters) * 100;
             return React.createElement("div", { key: z, className: "flex items-center gap-2" },
                 React.createElement("span", { className: "w-2.5 h-2.5 rounded-full shrink-0", style: { background: ZONE_COLORS[z] } }),
@@ -602,7 +602,7 @@ function PeakCurve({ sessions }) {
     const slowest = Math.max(...withData.map((b) => b.best));
     const range = slowest - fastest || 1;
     return React.createElement("div", { className: "w-full" },
-        React.createElement("div", { className: "grid grid-cols-2 gap-2" }, curve.map((b) => {
+        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, curve.map((b) => {
             const h = b.best ? 20 + ((slowest - b.best) / range) * 80 : 0;
             return React.createElement("div", { key: b.label, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
                 React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1 flex items-center gap-1" }, React.createElement(Icon.Zap, { size: 11 }), b.label),
@@ -672,7 +672,7 @@ function ConditionsWidget({ race }) {
     }
     const d = state.data;
     const cardLabel = (icon, text) => React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1 flex items-center gap-1" }, icon, text);
-    return React.createElement("div", { className: "grid grid-cols-2 gap-2" },
+    return React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" },
         React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
             cardLabel(React.createElement(Icon.Sky, { size: 11 }), "Cielo"),
             React.createElement("div", { className: "text-sm" }, WEATHER_CODES[d.code] || "\u2014")),
@@ -1117,23 +1117,26 @@ function SwimCoach() {
                     React.createElement("div", { className: "font-display uppercase text-xs tracking-wider text-[#9FB8C4] mb-2" }, "Ritmo medio por mes"),
                     React.createElement(PaceByPhaseChart, { sessions: sessions }))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
-            React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 my-8" },
-                React.createElement(CollapsibleSection, {
-                    id: "forma", card: true, defaultOpen: true, title: "Forma (fitness / fatiga)",
-                    subtitle: "modelo simplificado CTL/ATL/TSB \u2014 orientativo",
-                }, React.createElement(FitnessForm, { sessions: sessions })),
-                React.createElement(CollapsibleSection, {
-                    id: "condiciones", card: true, title: `Condiciones \u2014 ${nextRace.name}`,
-                    subtitle: "previsi\u00F3n en vivo \u00B7 desde 15 d\u00EDas antes",
-                }, React.createElement(ConditionsWidget, { race: nextRace })),
-                React.createElement(CollapsibleSection, { id: "prediccion", card: true, title: "Predicci\u00F3n de tiempo" },
-                    React.createElement("div", { className: "space-y-3" }, RACES.map((race) => React.createElement("div", { key: race.id, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-xl p-3" },
-                        React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mb-2" }, race.name, " \u00B7 ", race.distance.toLocaleString("es-ES"), "m"),
-                        React.createElement(RacePrediction, { sessions: sessions, race: race }))))),
-                React.createElement(CollapsibleSection, { id: "curva", card: true, title: "Curva de mejor esfuerzo" },
-                    React.createElement(PeakCurve, { sessions: sessions })),
-                React.createElement(CollapsibleSection, { id: "zonas", card: true, title: "Distribuci\u00F3n de zonas", subtitle: "volumen real, no planificado" },
-                    React.createElement(ZoneDistribution, { sessions: sessions, paceTargets: paceTargets }))),
+            React.createElement("div", { className: "my-8" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Forma (fitness / fatiga)"),
+                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "modelo simplificado CTL/ATL/TSB basado en volumen \u2014 orientativo, no un TSS real"),
+                React.createElement(FitnessForm, { sessions: sessions })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement(CollapsibleSection, {
+                id: "condiciones", title: `Condiciones \u2014 ${nextRace.name}`,
+                subtitle: "previsi\u00F3n en vivo, no hist\u00F3rica \u00B7 disponible desde 15 d\u00EDas antes de la carrera",
+            }, React.createElement(ConditionsWidget, { race: nextRace })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement(CollapsibleSection, { id: "prediccion", title: "Predicci\u00F3n de tiempo" },
+                React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" }, RACES.map((race) => React.createElement("div", { key: race.id, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-xl p-4" },
+                    React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mb-2" }, race.name, " \u00B7 ", race.distance.toLocaleString("es-ES"), "m"),
+                    React.createElement(RacePrediction, { sessions: sessions, race: race }))))),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement(CollapsibleSection, { id: "curva", title: "Curva de mejor esfuerzo" },
+                React.createElement(PeakCurve, { sessions: sessions })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement(CollapsibleSection, { id: "zonas", title: "Distribuci\u00F3n de zonas", subtitle: "d\u00F3nde va tu volumen real, no el planificado" },
+                React.createElement(ZoneDistribution, { sessions: sessions, paceTargets: paceTargets })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "calendario", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Calendario de entrenamiento \u2014 \u00FAltimas 26 semanas"),
