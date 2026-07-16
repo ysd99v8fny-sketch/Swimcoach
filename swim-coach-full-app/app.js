@@ -343,7 +343,7 @@ function Sparkline({ values }) {
         React.createElement("polyline", { points: pts.join(" "), fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })));
 }
 // ---- Single session row (used by the year/month accordion) ----------------
-function SessionCard({ s, sessions, paceTargets }) {
+function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const zone = hrZone(s.hr);
     const paceSec = paceToSeconds(s.pace);
     const isMultiZone = s.notation && s.notation.includes(",");
@@ -365,10 +365,21 @@ function SessionCard({ s, sessions, paceTargets }) {
         .reverse();
     const sparkValues = [...priorSwims.map((x) => paceToSeconds(x.pace)), paceSec].filter(Boolean);
     const isPlanned = !!s.planned;
-    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, isPlanned && React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wide bg-[#E8C547]/15 text-[#E8C547] rounded-full px-2 py-0.5 shrink-0" }, "propuesta"), React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })), React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)), React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`), s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100")), sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }), s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))), s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)), deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`)), s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes));
+    const badge = isPlanned && React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wide bg-[#E8C547]/15 text-[#E8C547] rounded-full px-2 py-0.5 shrink-0" }, "propuesta");
+    const typeIcon = React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" }));
+    const dateEl = React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date));
+    const distEl = React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`);
+    const paceEl = s.pace && React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100");
+    const sparkEl = sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues });
+    const hrEl = s.hr && React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`));
+    const notationEl = s.notation && React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation);
+    const deviationEl = deviation && React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`);
+    const notesEl = s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes);
+    const deleteBtn = isPlanned && onDelete && React.createElement("button", { onClick: () => onDelete(s.id), title: "Borrar propuesta", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 }));
+    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, badge, typeIcon, dateEl, distEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
 }
 // ---- Collapsible session log, grouped by year then month ------------------
-function SessionAccordion({ sessions, paceTargets }) {
+function SessionAccordion({ sessions, paceTargets, onDelete }) {
     const currentYear = String(TODAY.getFullYear());
     const currentMonth = TODAY.getMonth();
     const years = useMemo(() => groupByYearMonth(sessions), [sessions]);
@@ -404,7 +415,7 @@ function SessionAccordion({ sessions, paceTargets }) {
                             React.createElement("span", { className: "inline-block text-[#4A8B8C] text-xs transition-transform", style: { transform: monthOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "\u25B8"),
                             mo.label),
                         React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" }, (mo.meters / 1000).toFixed(1), "km \u00B7 ", mo.items.length, " sesiones")),
-                    monthOpen && React.createElement("div", { className: "p-2.5 space-y-2 bg-[#0B1F2E]" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions, paceTargets: paceTargets }))));
+                    monthOpen && React.createElement("div", { className: "p-2.5 space-y-2 bg-[#0B1F2E]" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions, paceTargets: paceTargets, onDelete: onDelete }))));
             })));
     }));
 }
@@ -697,6 +708,19 @@ function SwimCoach() {
             // will show up again next successful loadSessions() from the KV copy if this failed silently
         }
     };
+    const deleteSession = async (id) => {
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        try {
+            await fetch("/api/sessions", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id }),
+            });
+        }
+        catch (e) {
+            // will reappear on next successful loadSessions() if this failed silently
+        }
+    };
     const recentSummary = useMemo(() => {
         if (sessions.length === 0)
             return "Sin sesiones registradas todavía.";
@@ -859,7 +883,7 @@ function SwimCoach() {
                     const saveBtn = React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors mt-3 w-full sm:w-auto" }, "Guardar propuesta");
                     return React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" }, React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."), typeToggle, descInput, aguaSection, saveBtn);
                 })(),
-                React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets })),
+                React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets, onDelete: deleteSession })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 mb-1" },
