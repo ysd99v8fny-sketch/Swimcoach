@@ -23,3 +23,11 @@ export async function upsertSessions(newSessions) {
 export async function addManualSession(session) {
   return upsertSessions([session]);
 }
+
+/** Remove a session by id (used to clear a "planned" proposal once the real Strava data arrives). */
+export async function deleteSession(id) {
+  const existing = await getSessions();
+  const filtered = existing.filter((s) => s.id !== id);
+  await kv.set(SESSIONS_KEY, filtered);
+  return filtered;
+}
