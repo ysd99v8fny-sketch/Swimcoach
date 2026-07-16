@@ -367,6 +367,7 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const isPlanned = !!s.planned;
     const badge = isPlanned && React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wide bg-[#E8C547]/15 text-[#E8C547] rounded-full px-2 py-0.5 shrink-0" }, "propuesta");
     const typeIcon = React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" }));
+    const locationEl = !isDry && s.location && React.createElement("span", { className: `font-mono text-[9px] uppercase tracking-wide rounded-full px-2 py-0.5 shrink-0 ${s.location === "abiertas" ? "bg-[#4A8B8C]/15 text-[#7FA9AA]" : "bg-[#1E3D4F] text-[#5A7A87]"}` }, s.location === "abiertas" ? "aguas abiertas" : "piscina");
     const dateEl = React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date));
     const distEl = React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`);
     const paceEl = s.pace && React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100");
@@ -376,7 +377,7 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const deviationEl = deviation && React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`);
     const notesEl = s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes);
     const deleteBtn = isPlanned && onDelete && React.createElement("button", { onClick: () => onDelete(s.id), title: "Borrar propuesta", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 }));
-    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, badge, typeIcon, dateEl, distEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
+    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
 }
 // ---- Collapsible session log, grouped by year then month ------------------
 function SessionAccordion({ sessions, paceTargets, onDelete }) {
@@ -434,6 +435,165 @@ function buildLoadSeries(sessions) {
     });
     return byDate;
 }
+// ---- Race time prediction (Riegel model) -----------------------------
+// Uses your best recent sustained pace (from sessions of 1500m+) as a
+// reference effort, then extrapolates to the race distance with Riegel's
+// endurance formula: T2 = T1 · (D2/D1)^1.06. Pool paces get a fixed
+// open-water conversion offset since the two aren't directly comparable.
+const POOL_TO_OPENWATER_OFFSET_SEC = 10; // seconds/100m, pool tends to run faster
+function predictRaceTime(sessions, raceDistance) {
+    const cutoff = new Date(TODAY);
+    cutoff.setDate(cutoff.getDate() - 180);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const candidates = sessions
+        .filter((s) => s.type !== "seco" && !s.planned && s.distance >= 1500 && s.date >= cutoffStr)
+        .map((s) => ({ s, sec: paceToSeconds(s.pace) }))
+        .filter((x) => x.sec);
+    if (candidates.length === 0)
+        return null;
+    const best = candidates.reduce((a, b) => (b.sec < a.sec ? b : a));
+    const refPaceSec = best.s.location === "abiertas" ? best.sec : best.sec + POOL_TO_OPENWATER_OFFSET_SEC;
+    const refDistance = best.s.distance;
+    const refTotalSec = refPaceSec * (refDistance / 100);
+    const predictedTotalSec = refTotalSec * Math.pow(raceDistance / refDistance, 1.06);
+    return { totalSec: predictedTotalSec, refDistance, refDate: best.s.date, refWasPool: best.s.location !== "abiertas" };
+}
+function fmtDuration(totalSec) {
+    const m = Math.floor(totalSec / 60);
+    const s = Math.round(totalSec % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+}
+function RacePrediction({ sessions, race }) {
+    const pred = useMemo(() => predictRaceTime(sessions, race.distance), [sessions, race.distance]);
+    if (!pred) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Necesito alguna sesi\u00F3n de 1500m+ en los \u00FAltimos 6 meses para estimarlo.");
+    }
+    return React.createElement("div", { className: "flex flex-wrap items-center gap-4" },
+        React.createElement("div", null,
+            React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "Tiempo estimado"),
+            React.createElement("div", { className: "font-display text-3xl text-[#FF6B35]" }, fmtDuration(pred.totalSec))),
+        React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono max-w-xs" },
+            "basado en tu mejor ritmo reciente (", fmtDate(pred.refDate), ", ", pred.refDistance, "m", pred.refWasPool ? ", piscina +conversi\u00F3n" : "", ") \u00B7 modelo Riegel, orientativo"));
+}
+// ---- Approximate "peak curve" — best average pace by distance bucket -----
+// Not a true critical-pace curve (we don't have lap splits, only whole-session
+// averages), but a useful, honestly-labeled proxy: your fastest recorded
+// session average within each distance range, over the last 12 months.
+const PEAK_BUCKETS = [
+    { label: "100\u2013500m", min: 100, max: 500 },
+    { label: "500\u20131500m", min: 500, max: 1500 },
+    { label: "1500\u20133000m", min: 1500, max: 3000 },
+    { label: "3000m+", min: 3000, max: Infinity },
+];
+function computePeakCurve(sessions) {
+    const cutoff = new Date(TODAY);
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return PEAK_BUCKETS.map((b) => {
+        const matches = sessions
+            .filter((s) => s.type !== "seco" && !s.planned && s.date >= cutoffStr && s.distance >= b.min && s.distance < b.max)
+            .map((s) => ({ s, sec: paceToSeconds(s.pace) }))
+            .filter((x) => x.sec);
+        if (matches.length === 0)
+            return { ...b, best: null };
+        const best = matches.reduce((a, c) => (c.sec < a.sec ? c : a));
+        return { ...b, best: best.sec, date: best.s.date };
+    });
+}
+function PeakCurve({ sessions }) {
+    const curve = useMemo(() => computePeakCurve(sessions), [sessions]);
+    const withData = curve.filter((b) => b.best);
+    if (withData.length === 0) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos suficientes todav\u00EDa.");
+    }
+    const fastest = Math.min(...withData.map((b) => b.best));
+    const slowest = Math.max(...withData.map((b) => b.best));
+    const range = slowest - fastest || 1;
+    return React.createElement("div", { className: "w-full" },
+        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, curve.map((b) => {
+            const h = b.best ? 20 + ((slowest - b.best) / range) * 80 : 0;
+            return React.createElement("div", { key: b.label, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
+                React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, b.label),
+                b.best
+                    ? React.createElement(React.Fragment, null,
+                        React.createElement("div", { className: "font-display text-lg text-[#4A8B8C]" }, secondsToPace(b.best), "/100"),
+                        React.createElement("div", { className: "text-[9px] text-[#5A7A87] font-mono" }, fmtDate(b.date)))
+                    : React.createElement("div", { className: "text-[11px] text-[#5A7A87]" }, "\u2014"));
+        })),
+        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-3" }, "mejor ritmo medio de sesi\u00F3n por rango de distancia, \u00FAltimos 12 meses \u2014 aproximado, no es un test de umbral"));
+}
+
+// ---- Live conditions for the next race (Open-Meteo, free, no key) --------
+const WEATHER_CODES = {
+    0: "despejado", 1: "mayormente despejado", 2: "parcialmente nublado", 3: "cubierto",
+    45: "niebla", 48: "niebla escarchada",
+    51: "llovizna ligera", 53: "llovizna", 55: "llovizna intensa",
+    61: "lluvia ligera", 63: "lluvia", 65: "lluvia intensa",
+    80: "chubascos ligeros", 81: "chubascos", 82: "chubascos intensos",
+    95: "tormenta",
+};
+const GETARIA_LAT = 43.303, GETARIA_LON = -2.199;
+function ConditionsWidget({ race }) {
+    const [state, setState] = useState({ loading: true, error: null, data: null });
+    useEffect(() => {
+        let cancelled = false;
+        const today = TODAY.toISOString().slice(0, 10);
+        const daysOut = daysBetween(TODAY, race.date);
+        if (daysOut < 0 || daysOut > 15) {
+            setState({ loading: false, error: `Previsi\u00F3n disponible desde 15 d\u00EDas antes de la carrera \u2014 vuelve m\u00E1s cerca del ${fmtDate(race.date)}.`, data: null });
+            return;
+        }
+        setState({ loading: true, error: null, data: null });
+        Promise.all([
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${GETARIA_LAT}&longitude=${GETARIA_LON}&daily=temperature_2m_max,temperature_2m_min,weathercode,windspeed_10m_max&timezone=Europe%2FMadrid&start_date=${race.date}&end_date=${race.date}`).then((r) => r.json()),
+            fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${GETARIA_LAT}&longitude=${GETARIA_LON}&daily=wave_height_max&hourly=sea_surface_temperature&timezone=Europe%2FMadrid&start_date=${race.date}&end_date=${race.date}`).then((r) => r.json()).catch(() => null),
+        ]).then(([forecast, marine]) => {
+            if (cancelled)
+                return;
+            if (!forecast?.daily?.temperature_2m_max?.length) {
+                setState({ loading: false, error: "No he podido traer la previsi\u00F3n todav\u00EDa.", data: null });
+                return;
+            }
+            const seaTemps = marine?.hourly?.sea_surface_temperature;
+            const avgSeaTemp = seaTemps && seaTemps.length ? seaTemps.reduce((a, b) => a + b, 0) / seaTemps.length : null;
+            setState({
+                loading: false, error: null, data: {
+                    tMax: forecast.daily.temperature_2m_max[0],
+                    tMin: forecast.daily.temperature_2m_min[0],
+                    code: forecast.daily.weathercode[0],
+                    wind: forecast.daily.windspeed_10m_max[0],
+                    waveHeight: marine?.daily?.wave_height_max?.[0] ?? null,
+                    seaTemp: avgSeaTemp,
+                },
+            });
+        }).catch(() => {
+            if (!cancelled)
+                setState({ loading: false, error: "No se pudo conectar con el servicio de tiempo.", data: null });
+        });
+        return () => { cancelled = true; };
+    }, [race.date]);
+    if (state.loading) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono flex items-center gap-2" }, React.createElement(Icon.Loader2, { size: 12, className: "animate-spin" }), "cargando previsi\u00F3n\u2026");
+    }
+    if (state.error) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, state.error);
+    }
+    const d = state.data;
+    return React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" },
+        React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
+            React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "Cielo"),
+            React.createElement("div", { className: "text-sm" }, WEATHER_CODES[d.code] || "\u2014")),
+        React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
+            React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "Temp. aire"),
+            React.createElement("div", { className: "font-display text-lg text-[#FF6B35]" }, Math.round(d.tMin), "\u2013", Math.round(d.tMax), "\u00B0")),
+        React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
+            React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "Viento m\u00E1x."),
+            React.createElement("div", { className: "font-display text-lg text-[#7FA9AA]" }, Math.round(d.wind), " km/h")),
+        React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg p-3" },
+            React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "Mar"),
+            React.createElement("div", { className: "font-display text-lg text-[#4A8B8C]" }, d.seaTemp ? `${d.seaTemp.toFixed(1)}\u00B0` : "\u2014", d.waveHeight != null && React.createElement("span", { className: "text-[10px] text-[#5A7A87] font-mono ml-1" }, d.waveHeight.toFixed(1), "m ola"))));
+}
+
 function computeFitnessForm(sessions) {
     if (sessions.length === 0)
         return null;
@@ -688,6 +848,7 @@ function SwimCoach() {
             pace: form.type === "agua" && avgPaceSec ? secondsToPace(avgPaceSec) : "",
             hr: "",
             notation: form.type === "agua" ? zonesUsed.join(", ") : "",
+            location: "piscina",
             notes: form.type === "agua"
                 ? `Propuesta: ${blockLines}${form.description ? " · " + form.description : ""}`
                 : (form.description || ""),
@@ -850,6 +1011,21 @@ function SwimCoach() {
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Forma (fitness / fatiga)"),
                 React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "modelo simplificado CTL/ATL/TSB basado en volumen \u2014 orientativo, no un TSS real"),
                 React.createElement(FitnessForm, { sessions: sessions })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement("div", { className: "my-8" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Condiciones \u2014 ", nextRace.name),
+                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "previsi\u00F3n en vivo, no hist\u00F3rica \u2014 disponible desde 15 d\u00EDas antes de la carrera"),
+                React.createElement(ConditionsWidget, { race: nextRace })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement("div", { className: "my-8" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Predicci\u00F3n de tiempo"),
+                React.createElement("div", { className: "space-y-4" }, RACES.map((race) => React.createElement("div", { key: race.id },
+                    React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mb-1" }, race.name, " \u00B7 ", race.distance.toLocaleString("es-ES"), "m"),
+                    React.createElement(RacePrediction, { sessions: sessions, race: race }))))),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement("div", { className: "my-8" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Curva de mejor esfuerzo"),
+                React.createElement(PeakCurve, { sessions: sessions })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Calendario de entrenamiento \u2014 \u00FAltimas 26 semanas"),
