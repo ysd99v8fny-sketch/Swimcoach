@@ -346,7 +346,8 @@ function Sparkline({ values }) {
 function SessionCard({ s, sessions, paceTargets }) {
     const zone = hrZone(s.hr);
     const paceSec = paceToSeconds(s.pace);
-    const primaryNotation = s.notation ? s.notation.split(/[\/,]/)[0].trim() : null;
+    const isMultiZone = s.notation && s.notation.includes(",");
+    const primaryNotation = s.notation && !isMultiZone ? s.notation.split(/[\/,]/)[0].trim() : null;
     const target = primaryNotation ? (paceTargets || DEFAULT_PACE_TARGETS)[primaryNotation] : null;
     let deviation = null;
     if (target && paceSec) {
@@ -550,7 +551,7 @@ function SwimCoach() {
     const [sessions, setSessions] = useState([]);
     const [loaded, setLoaded] = useState(false);
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ type: "agua", description: "", series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
+    const [form, setForm] = useState({ type: "agua", description: "", blocks: [{ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno" }] });
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState("");
     const [paceTargets, setPaceTargets] = useState(() => {
@@ -647,28 +648,43 @@ function SwimCoach() {
         }
         setSyncing(false);
     };
-    const totalMeters = form.type === "agua" ? (Number(form.series) || 0) * (Number(form.meters) || 0) : 0;
+    const emptyBlock = () => ({ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
+    const addBlock = () => setForm((f) => ({ ...f, blocks: [...f.blocks, emptyBlock()] }));
+    const removeBlock = (id) => setForm((f) => ({ ...f, blocks: f.blocks.length > 1 ? f.blocks.filter((b) => b.id !== id) : f.blocks }));
+    const updateBlock = (id, field, value) => setForm((f) => ({ ...f, blocks: f.blocks.map((b) => (b.id === id ? { ...b, [field]: value } : b)) }));
+    const blockMeters = (b) => (Number(b.series) || 0) * (Number(b.meters) || 0);
+    const totalMeters = form.type === "agua" ? form.blocks.reduce((sum, b) => sum + blockMeters(b), 0) : 0;
     const addSession = async () => {
         if (form.type === "agua" && totalMeters <= 0)
             return;
-        const range = paceTargets[form.ritmo] || DEFAULT_PACE_TARGETS[form.ritmo];
-        const materialNote = form.material && form.material !== "ninguno" ? ` · ${form.material}` : "";
+        // distance-weighted average pace across all blocks, for the summary pace column
+        let weightedSec = 0;
+        form.blocks.forEach((b) => {
+            const range = paceTargets[b.ritmo] || DEFAULT_PACE_TARGETS[b.ritmo];
+            if (range)
+                weightedSec += ((range[0] + range[1]) / 2) * blockMeters(b);
+        });
+        const avgPaceSec = totalMeters > 0 ? weightedSec / totalMeters : 0;
+        const zonesUsed = [...new Set(form.blocks.map((b) => b.ritmo))];
+        const blockLines = form.blocks
+            .map((b) => `${b.series}x${b.meters}m ${b.ritmo}${b.material !== "ninguno" ? ` (${b.material})` : ""}`)
+            .join(" · ");
         const newSession = {
             id: uid(),
             type: form.type,
             date: new Date().toISOString().slice(0, 10),
             distance: form.type === "agua" ? totalMeters : 0,
-            pace: form.type === "agua" && range ? secondsToPace((range[0] + range[1]) / 2) : "",
+            pace: form.type === "agua" && avgPaceSec ? secondsToPace(avgPaceSec) : "",
             hr: "",
-            notation: form.type === "agua" ? form.ritmo : "",
+            notation: form.type === "agua" ? zonesUsed.join(", ") : "",
             notes: form.type === "agua"
-                ? `Propuesta: ${form.series}x${form.meters}m${materialNote}${form.description ? " · " + form.description : ""}`
+                ? `Propuesta: ${blockLines}${form.description ? " · " + form.description : ""}`
                 : (form.description || ""),
             planned: true,
         };
         // optimistic update
         setSessions((prev) => [newSession, ...prev]);
-        setForm({ type: "agua", description: "", series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
+        setForm({ type: "agua", description: "", blocks: [emptyBlock()] });
         setShowForm(false);
         try {
             await fetch("/api/sessions", {
@@ -821,28 +837,28 @@ function SwimCoach() {
                     React.createElement("button", { onClick: () => setShowForm((s) => !s), className: "tap-target flex items-center gap-1 text-xs font-mono uppercase tracking-wide bg-[#142F42] hover:bg-[#1B3B52] border border-[#1E3D4F] rounded-full px-4 py-2.5 transition-colors" },
                         showForm ? React.createElement(Icon.X, { size: 13 }) : React.createElement(Icon.Plus, { size: 13 }),
                         showForm ? "cerrar" : "proponer sesión")),
-                showForm && (React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" },
-                    React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."),
-                    React.createElement("div", { className: "flex rounded-lg overflow-hidden border border-[#1E3D4F] mb-3" },
-                        React.createElement("button", { onClick: () => setForm({ ...form, type: "agua" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "agua" ? "bg-[#4A8B8C] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "agua"),
-                        React.createElement("button", { onClick: () => setForm({ ...form, type: "seco" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "seco" ? "bg-[#FF6B35] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "seco")),
-                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
-                        React.createElement("input", { placeholder: "Descripci\u00F3n", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), style: { fontSize: 16 }, className: "col-span-2 sm:col-span-4 bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                        form.type === "agua" && (React.createElement(React.Fragment, null,
-                            React.createElement("div", null,
-                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Series"),
-                                React.createElement("input", { type: "number", min: 1, max: 10, value: form.series, onChange: (e) => setForm({ ...form, series: Math.max(1, Math.min(10, Number(e.target.value) || 1)) }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" })),
-                            React.createElement("div", null,
-                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Metros"),
-                                React.createElement("input", { type: "number", min: 25, max: 5000, step: 25, value: form.meters, onChange: (e) => setForm({ ...form, meters: Math.max(25, Math.min(5000, Number(e.target.value) || 25)) }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" })),
-                            React.createElement("div", null,
-                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Ritmo"),
-                                React.createElement("select", { value: form.ritmo, onChange: (e) => setForm({ ...form, ritmo: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }, NOTATION_HELP.map((z) => React.createElement("option", { key: z, value: z }, z)))),
-                            React.createElement("div", null,
-                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Material"),
-                                React.createElement("select", { value: form.material, onChange: (e) => setForm({ ...form, material: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#4A8B8C]" }, ["ninguno", "palas", "aletas", "pullboy"].map((mtl) => React.createElement("option", { key: mtl, value: mtl }, mtl))))))),
-                    form.type === "agua" && React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mt-3" }, "Total: ", React.createElement("span", { className: "text-[#FF6B35] font-medium" }, totalMeters, "m"), ` \u00B7 ${form.series} \u00D7 ${form.meters}m`),
-                    React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors mt-3 w-full sm:w-auto" }, "Guardar propuesta"))),
+                showForm && (function () {
+                    const typeToggle = React.createElement("div", { className: "flex rounded-lg overflow-hidden border border-[#1E3D4F] mb-3" }, React.createElement("button", { onClick: () => setForm({ ...form, type: "agua" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "agua" ? "bg-[#4A8B8C] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "agua"), React.createElement("button", { onClick: () => setForm({ ...form, type: "seco" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "seco" ? "bg-[#FF6B35] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "seco"));
+                    const descInput = React.createElement("input", { placeholder: "Descripci\u00F3n (opcional)", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C] mb-3" });
+                    const field = (label, inputEl) => React.createElement("div", null, React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, label), inputEl);
+                    const blockRows = form.blocks.map((b, i) => {
+                        const header = React.createElement("div", { className: "flex items-center justify-between mb-2" }, React.createElement("span", { className: "font-mono text-[10px] uppercase text-[#5A7A87]" }, "L\u00EDnea ", i + 1, " \u00B7 ", blockMeters(b), "m"), form.blocks.length > 1 && React.createElement("button", { onClick: () => removeBlock(b.id), className: "tap-target text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 })));
+                        const seriesInput = field("Series", React.createElement("input", { type: "number", min: 1, max: 10, value: b.series, onChange: (e) => updateBlock(b.id, "series", Math.max(1, Math.min(10, Number(e.target.value) || 1))), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }));
+                        const metersInput = field("Metros", React.createElement("input", { type: "number", min: 25, max: 5000, step: 25, value: b.meters, onChange: (e) => updateBlock(b.id, "meters", Math.max(25, Math.min(5000, Number(e.target.value) || 25))), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }));
+                        const ritmoOptions = NOTATION_HELP.map((z) => React.createElement("option", { key: z, value: z }, z));
+                        const ritmoInput = field("Ritmo", React.createElement("select", { value: b.ritmo, onChange: (e) => updateBlock(b.id, "ritmo", e.target.value), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }, ritmoOptions));
+                        const materialOptions = ["ninguno", "palas", "aletas", "pullboy"].map((mtl) => React.createElement("option", { key: mtl, value: mtl }, mtl));
+                        const materialInput = field("Material", React.createElement("select", { value: b.material, onChange: (e) => updateBlock(b.id, "material", e.target.value), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#4A8B8C]" }, materialOptions));
+                        const grid = React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, seriesInput, metersInput, ritmoInput, materialInput);
+                        return React.createElement("div", { key: b.id, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg p-3" }, header, grid);
+                    });
+                    const blocksList = React.createElement("div", { className: "space-y-2" }, blockRows);
+                    const addLineBtn = React.createElement("button", { onClick: addBlock, className: "tap-target flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide text-[#4A8B8C] hover:text-[#7FA9AA] transition-colors mt-2" }, React.createElement(Icon.Plus, { size: 12 }), "a\u00F1adir l\u00EDnea");
+                    const totalLine = React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mt-3" }, "Total: ", React.createElement("span", { className: "text-[#FF6B35] font-medium" }, totalMeters, "m"), " \u00B7 ", form.blocks.length, " l\u00EDnea", form.blocks.length > 1 ? "s" : "");
+                    const aguaSection = form.type === "agua" && React.createElement(React.Fragment, null, blocksList, addLineBtn, totalLine);
+                    const saveBtn = React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors mt-3 w-full sm:w-auto" }, "Guardar propuesta");
+                    return React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" }, React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."), typeToggle, descInput, aguaSection, saveBtn);
+                })(),
                 React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
