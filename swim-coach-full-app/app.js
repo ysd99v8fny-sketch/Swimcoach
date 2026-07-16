@@ -141,6 +141,26 @@ function groupByWeek(sessions) {
     });
     return Object.values(groups).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
 }
+const MONTH_NAMES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function groupByYearMonth(sessions) {
+    const years = {};
+    sessions.forEach((s) => {
+        const y = s.date.slice(0, 4);
+        const m = Number(s.date.slice(5, 7)) - 1;
+        if (!years[y])
+            years[y] = { year: y, meters: 0, months: {} };
+        if (!years[y].months[m])
+            years[y].months[m] = { month: m, label: MONTH_NAMES_ES[m], items: [], meters: 0 };
+        years[y].months[m].items.push(s);
+        if (s.type !== "seco") {
+            years[y].months[m].meters += s.distance || 0;
+            years[y].meters += s.distance || 0;
+        }
+    });
+    return Object.values(years)
+        .sort((a, b) => (a.year < b.year ? 1 : -1))
+        .map((y) => ({ ...y, months: Object.values(y.months).sort((a, b) => b.month - a.month) }));
+}
 // ---- Seed data pulled from Strava (swims, most recent first) --------------
 // ---- Wave divider ---------------------------------------------------------
 function WaveDivider({ color = "#4A8B8C", opacity = 0.5 }) {
@@ -178,10 +198,13 @@ function TideTimeline() {
 }
 // ---- Monthly volume bar chart ---------------------------------------------
 function MonthlyVolumeChart({ sessions }) {
+    const currentYear = String(TODAY.getFullYear());
     const monthly = useMemo(() => {
         const groups = {};
         sessions.forEach((s) => {
             if (s.type === "seco")
+                return;
+            if (!s.date.startsWith(currentYear))
                 return;
             const ym = s.date.slice(0, 7);
             if (!groups[ym])
@@ -228,12 +251,14 @@ function phaseForDate(dateStr) {
     return { key: "taper", label: "Taper", color: "#FF6B35" };
 }
 function PaceByPhaseChart({ sessions }) {
-    const [showAll, setShowAll] = useState(false);
-    const monthlyAll = useMemo(() => {
+    const currentYear = String(TODAY.getFullYear());
+    const monthly = useMemo(() => {
         const groups = {};
         sessions.forEach((s) => {
             const secs = paceToSeconds(s.pace);
             if (!secs)
+                return;
+            if (!s.date.startsWith(currentYear))
                 return;
             const ym = s.date.slice(0, 7);
             if (!groups[ym])
@@ -245,35 +270,27 @@ function PaceByPhaseChart({ sessions }) {
             .map(([ym, g]) => ({ ym, avgSec: g.total / g.count, date: g.date }))
             .sort((a, b) => (a.ym < b.ym ? -1 : 1));
     }, [sessions]);
-    if (monthlyAll.length === 0) {
-        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos de ritmo suficientes todav\u00EDa.");
+    if (monthly.length === 0) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos de ritmo suficientes todav\u00EDa este a\u00F1o.");
     }
-    const monthly = showAll ? monthlyAll : monthlyAll.slice(-6);
     const fastest = Math.min(...monthly.map((m) => m.avgSec));
     const slowest = Math.max(...monthly.map((m) => m.avgSec));
     const range = slowest - fastest || 1;
+    const W = 100, H = 100, padX = 4, padY = 14;
+    const xFor = (i) => monthly.length === 1 ? W / 2 : padX + (i / (monthly.length - 1)) * (W - padX * 2);
+    // faster pace (lower seconds) -> higher on the chart
+    const yFor = (sec) => padY + ((sec - fastest) / range) * (H - padY * 2);
+    const points = monthly.map((m, i) => ({ x: xFor(i), y: yFor(m.avgSec), m }));
+    const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
     return (React.createElement("div", { className: "w-full" },
-        React.createElement("div", { className: "flex items-end gap-1.5 h-28" }, monthly.map((m) => {
-            // faster pace (lower seconds) -> taller bar, visually "better"
-            const h = 20 + ((slowest - m.avgSec) / range) * 80;
-            const phase = phaseForDate(m.date);
-            const mm = Math.floor(m.avgSec / 60);
-            const ss = Math.round(m.avgSec % 60);
-            return (React.createElement("div", { key: m.ym, className: "flex-1 flex flex-col items-center justify-end h-full group relative" },
-                React.createElement("span", { className: "text-[9px] font-mono text-[#7FA9AA] mb-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4 whitespace-nowrap" },
-                    mm,
-                    ":",
-                    String(ss).padStart(2, "0"),
-                    "/100m"),
-                React.createElement("div", { className: "w-full rounded-t-sm", style: { height: `${h}%`, background: phase.color, opacity: 0.8 } })));
-        })),
-        React.createElement("div", { className: "flex gap-1.5 mt-2" }, monthly.map((m) => (React.createElement("div", { key: m.ym, className: "flex-1 text-center text-[9px] font-mono text-[#7FA9AA] uppercase" },
+        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-32", preserveAspectRatio: "none" },
+            React.createElement("path", { d: pathD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.2", vectorEffect: "non-scaling-stroke" }),
+            points.map((p, i) => (React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: "1.8", fill: phaseForDate(p.m.date).color, vectorEffect: "non-scaling-stroke" })))),
+        React.createElement("div", { className: "flex gap-1.5 mt-1" }, monthly.map((m) => (React.createElement("div", { key: m.ym, className: "flex-1 text-center text-[9px] font-mono text-[#7FA9AA] uppercase" },
             m.ym.slice(5),
             "/",
             m.ym.slice(2, 4))))),
-        React.createElement("div", { className: "flex items-center justify-between mt-2" },
-            React.createElement("span", { className: "text-[10px] font-mono text-[#5A7A87]" }, "barras m\u00E1s altas = ritmo m\u00E1s r\u00E1pido ese mes"),
-            monthlyAll.length > 6 && (React.createElement("button", { onClick: () => setShowAll((v) => !v), className: "text-[10px] font-mono text-[#4A8B8C] hover:text-[#7FA9AA] transition-colors underline underline-offset-2" }, showAll ? "ver últimos 6 meses" : `ver todo (${monthlyAll.length} meses)`)))));
+        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-2" }, `${currentYear} \u00B7 punto m\u00E1s alto = ritmo m\u00E1s r\u00E1pido ese mes`)));
 }
 // ---- Pace sparkline (mini trend vs previous 3 sessions) -------------------
 function Sparkline({ values }) {
@@ -296,7 +313,40 @@ function Sparkline({ values }) {
     return (React.createElement("svg", { width: w, height: h, className: "shrink-0" },
         React.createElement("polyline", { points: pts.join(" "), fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })));
 }
-// ---- Training load model (CTL/ATL/TSB) -------------------------------
+// ---- Single session row (used by the year/month accordion) ----------------
+function SessionCard({ s, sessions }) {
+    const zone = hrZone(s.hr);
+    const paceSec = paceToSeconds(s.pace);
+    const primaryNotation = s.notation ? s.notation.split(/[\/,]/)[0].trim() : null;
+    const target = primaryNotation ? PACE_TARGETS[primaryNotation] : null;
+    let deviation = null;
+    if (target && paceSec) {
+        if (paceSec < target[0])
+            deviation = "rápido";
+        else if (paceSec > target[1])
+            deviation = "lento";
+    }
+    const isDry = s.type === "seco";
+    const idxInAll = sessions.indexOf(s);
+    const priorSwims = sessions
+        .slice(idxInAll + 1)
+        .filter((x) => x.type !== "seco" && paceToSeconds(x.pace))
+        .slice(0, 3)
+        .reverse();
+    const sparkValues = [...priorSwims.map((x) => paceToSeconds(x.pace)), paceSec].filter(Boolean);
+    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: "solid" } }, React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })), React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)), React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`), s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100")), sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }), s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))), s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)), deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`)), s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes));
+}
+// ---- Collapsible session log, grouped by year then month ------------------
+function SessionAccordion({ sessions }) {
+    const currentYear = String(TODAY.getFullYear());
+    const currentMonth = TODAY.getMonth();
+    const years = useMemo(() => groupByYearMonth(sessions), [sessions]);
+    if (years.length === 0) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono py-6 text-center border border-dashed border-[#1E3D4F] rounded-2xl" }, "Todav\u00EDa no hay sesiones \u2014 a\u00F1ade la primera.");
+    }
+    return React.createElement("div", { className: "space-y-2" }, years.map((y) => React.createElement("details", { key: y.year, open: y.year === currentYear, className: "group" }, React.createElement("summary", { className: "tap-target flex items-center justify-between cursor-pointer select-none bg-[#142F42] hover:bg-[#1B3B52] border border-[#1E3D4F] rounded-xl px-4 py-3 font-display uppercase text-sm tracking-wide list-none" }, React.createElement("span", { className: "flex items-center gap-2" }, React.createElement("span", { className: "inline-block transition-transform group-open:rotate-90 text-[#7FA9AA]" }, "\u25B8"), y.year), React.createElement("span", { className: "font-mono text-[11px] text-[#7FA9AA] normal-case tracking-normal" }, (y.meters / 1000).toFixed(1), "km")), React.createElement("div", { className: "pl-2 sm:pl-4 mt-2 space-y-2 border-l border-[#1E3D4F] ml-2" }, y.months.map((mo) => React.createElement("details", { key: mo.month, open: y.year === currentYear && mo.month === currentMonth, className: "group/month" }, React.createElement("summary", { className: "tap-target flex items-center justify-between cursor-pointer select-none bg-[#0E2634] hover:bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 text-sm capitalize list-none" }, React.createElement("span", { className: "flex items-center gap-2" }, React.createElement("span", { className: "inline-block transition-transform group-open/month:rotate-90 text-[#5A7A87] text-xs" }, "\u25B8"), mo.label), React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" }, (mo.meters / 1000).toFixed(1), "km \u00B7 ", mo.items.length, " sesiones")), React.createElement("div", { className: "space-y-2 mt-2" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions })))))))));
+}
+
 // Simplified fitness/fatigue/form model (Coggan PMC-style), using distance
 // as a load proxy since we don't have a power/pace-based TSS from Strava
 // for open-water swims. Not medically precise — a personal training aid.
@@ -608,6 +658,23 @@ function SwimCoach() {
                 React.createElement("div", { className: "mt-2 text-sm text-[#9FB8C4] max-w-xl" }, "\u00DAltima semana de puesta a punto. Volumen bajo, intensidad mantenida, prioridad al descanso.")),
             React.createElement(WaveDivider, null),
             React.createElement("div", { className: "my-8" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Entrenador"),
+                React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl flex flex-col h-[420px]" },
+                    React.createElement("div", { className: "flex-1 overflow-y-auto p-4 space-y-3" },
+                        messages.map((m, i) => (React.createElement("div", { key: i, className: `flex ${m.role === "user" ? "justify-end" : "justify-start"}` },
+                            React.createElement("div", { className: `max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user"
+                                    ? "bg-[#FF6B35] text-[#0B1F2E] font-medium rounded-br-sm"
+                                    : "bg-[#142F42] text-[#EAF2F2] rounded-bl-sm border border-[#1E3D4F]"}` }, m.text)))),
+                        sending && (React.createElement("div", { className: "flex justify-start" },
+                            React.createElement("div", { className: "bg-[#142F42] border border-[#1E3D4F] rounded-2xl rounded-bl-sm px-4 py-2.5" },
+                                React.createElement(Icon.Loader2, { size: 14, className: "animate-spin text-[#7FA9AA]" })))),
+                        React.createElement("div", { ref: chatEndRef })),
+                    React.createElement("div", { className: "border-t border-[#1E3D4F] p-3 flex gap-2 safe-bottom" },
+                        React.createElement("input", { value: input, onChange: (e) => setInput(e.target.value), onFocus: (e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300), onKeyDown: (e) => e.key === "Enter" && send(), placeholder: "Pregunta o pide una sesi\u00F3n...", style: { fontSize: 16 }, className: "flex-1 bg-[#0B1F2E] border border-[#1E3D4F] rounded-full px-4 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
+                        React.createElement("button", { onClick: send, disabled: sending, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] disabled:opacity-50 text-[#0B1F2E] rounded-full flex items-center justify-center shrink-0 transition-colors" },
+                            React.createElement(Icon.Send, { size: 15 }))))),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Temporada \u2014 sep 25 a oct 26"),
                 React.createElement(TideTimeline, null),
                 React.createElement("div", { className: "flex gap-3 mt-3 flex-wrap text-[11px] font-mono text-[#9FB8C4]" },
@@ -658,62 +725,7 @@ function SwimCoach() {
                     React.createElement("input", { placeholder: "notaci\u00F3n (AeM, A1...)", value: form.notation, onChange: (e) => setForm({ ...form, notation: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
                     React.createElement("input", { placeholder: "notas (opcional)", value: form.notes, onChange: (e) => setForm({ ...form, notes: e.target.value }), style: { fontSize: 16 }, className: "col-span-2 sm:col-span-3 bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
                     React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors" }, "Guardar"))),
-                sessions.length === 0 ? (React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono py-6 text-center border border-dashed border-[#1E3D4F] rounded-2xl" }, "Todav\u00EDa no hay sesiones \u2014 a\u00F1ade la primera.")) : (React.createElement("div", { className: "space-y-5" }, groupByWeek(sessions).map((wk) => {
-                    const wkEnd = new Date(wk.weekStart + "T00:00:00");
-                    wkEnd.setDate(wkEnd.getDate() + 6);
-                    return (React.createElement("div", { key: wk.weekStart },
-                        React.createElement("div", { className: "flex items-baseline justify-between mb-2 px-1" },
-                            React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" },
-                                "Semana del ",
-                                fmtDate(wk.weekStart),
-                                " al ",
-                                fmtDate(wkEnd.toISOString().slice(0, 10))),
-                            React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" },
-                                (wk.meters / 1000).toFixed(1),
-                                "km")),
-                        React.createElement("div", { className: "space-y-2" }, wk.items.map((s) => {
-                            const zone = hrZone(s.hr);
-                            const paceSec = paceToSeconds(s.pace);
-                            const primaryNotation = s.notation ? s.notation.split(/[\/,]/)[0].trim() : null;
-                            const target = primaryNotation ? PACE_TARGETS[primaryNotation] : null;
-                            let deviation = null;
-                            if (target && paceSec) {
-                                if (paceSec < target[0])
-                                    deviation = "rápido";
-                                else if (paceSec > target[1])
-                                    deviation = "lento";
-                            }
-                            const isDry = s.type === "seco";
-                            // sparkline: this session + up to 3 prior swim sessions (oldest first)
-                            const idxInAll = sessions.indexOf(s);
-                            const priorSwims = sessions
-                                .slice(idxInAll + 1)
-                                .filter((x) => x.type !== "seco" && paceToSeconds(x.pace))
-                                .slice(0, 3)
-                                .reverse();
-                            const sparkValues = [...priorSwims.map((x) => paceToSeconds(x.pace)), paceSec].filter(Boolean);
-                            return (React.createElement("div", { key: s.id, className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: "solid" } },
-                                React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })),
-                                React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)),
-                                React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`),
-                                s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" },
-                                    React.createElement(Icon.Timer, { size: 12 }),
-                                    s.pace,
-                                    "/100")),
-                                sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }),
-                                s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" },
-                                    React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }),
-                                    s.hr,
-                                    " bpm",
-                                    zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))),
-                                s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)),
-                                deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` },
-                                    "\u26A0 ",
-                                    deviation,
-                                    ` (obj. ${target[0]}-${target[1]}s)`)),
-                                s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes)));
-                        }))));
-                })))),
+                React.createElement(SessionAccordion, { sessions: sessions })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Notaci\u00F3n"),
@@ -769,22 +781,6 @@ function SwimCoach() {
                         React.createElement("div", { className: "text-sm font-medium" }, b.title),
                         b.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4]" }, b.detail))))))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
-            React.createElement("div", { className: "my-8" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Entrenador"),
-                React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl flex flex-col h-[420px]" },
-                    React.createElement("div", { className: "flex-1 overflow-y-auto p-4 space-y-3" },
-                        messages.map((m, i) => (React.createElement("div", { key: i, className: `flex ${m.role === "user" ? "justify-end" : "justify-start"}` },
-                            React.createElement("div", { className: `max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user"
-                                    ? "bg-[#FF6B35] text-[#0B1F2E] font-medium rounded-br-sm"
-                                    : "bg-[#142F42] text-[#EAF2F2] rounded-bl-sm border border-[#1E3D4F]"}` }, m.text)))),
-                        sending && (React.createElement("div", { className: "flex justify-start" },
-                            React.createElement("div", { className: "bg-[#142F42] border border-[#1E3D4F] rounded-2xl rounded-bl-sm px-4 py-2.5" },
-                                React.createElement(Icon.Loader2, { size: 14, className: "animate-spin text-[#7FA9AA]" })))),
-                        React.createElement("div", { ref: chatEndRef })),
-                    React.createElement("div", { className: "border-t border-[#1E3D4F] p-3 flex gap-2 safe-bottom" },
-                        React.createElement("input", { value: input, onChange: (e) => setInput(e.target.value), onFocus: (e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300), onKeyDown: (e) => e.key === "Enter" && send(), placeholder: "Pregunta o pide una sesi\u00F3n...", style: { fontSize: 16 }, className: "flex-1 bg-[#0B1F2E] border border-[#1E3D4F] rounded-full px-4 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                        React.createElement("button", { onClick: send, disabled: sending, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] disabled:opacity-50 text-[#0B1F2E] rounded-full flex items-center justify-center shrink-0 transition-colors" },
-                            React.createElement(Icon.Send, { size: 15 }))))),
             React.createElement("div", { className: "text-center text-[10px] font-mono text-[#3E5A68] pt-4 pb-2 uppercase tracking-widest" }, "Getaria\u2013Zarautz \u00B7 Salom\u00E9 Campos \u00B7 Torrevieja"))));
 }
 // ---- Mount --------------------------------------------------------------
