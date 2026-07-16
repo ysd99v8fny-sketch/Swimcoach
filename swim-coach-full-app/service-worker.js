@@ -32,7 +32,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // Never cache our own API or the Anthropic API — always go live for data/chat.
-  if (url.pathname.startsWith("/api/") || url.hostname.includes("api.anthropic.com")) {
+  if (url.pathname.startsWith("/api/") || url.hostname.includes("api.anthropic.com") || url.hostname.includes("open-meteo.com")) {
     event.respondWith(fetch(event.request));
     return;
   }
