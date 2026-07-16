@@ -562,7 +562,7 @@ function SwimCoach() {
     const [sessions, setSessions] = useState([]);
     const [loaded, setLoaded] = useState(false);
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ type: "agua", description: "", blocks: [{ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno" }] });
+    const [form, setForm] = useState({ type: "agua", date: new Date().toISOString().slice(0, 10), description: "", blocks: [{ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno" }] });
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState("");
     const [paceTargets, setPaceTargets] = useState(() => {
@@ -683,7 +683,7 @@ function SwimCoach() {
         const newSession = {
             id: uid(),
             type: form.type,
-            date: new Date().toISOString().slice(0, 10),
+            date: form.date || new Date().toISOString().slice(0, 10),
             distance: form.type === "agua" ? totalMeters : 0,
             pace: form.type === "agua" && avgPaceSec ? secondsToPace(avgPaceSec) : "",
             hr: "",
@@ -695,7 +695,7 @@ function SwimCoach() {
         };
         // optimistic update
         setSessions((prev) => [newSession, ...prev]);
-        setForm({ type: "agua", description: "", blocks: [emptyBlock()] });
+        setForm({ type: "agua", date: new Date().toISOString().slice(0, 10), description: "", blocks: [emptyBlock()] });
         setShowForm(false);
         try {
             await fetch("/api/sessions", {
@@ -863,6 +863,7 @@ function SwimCoach() {
                         showForm ? "cerrar" : "proponer sesión")),
                 showForm && (function () {
                     const typeToggle = React.createElement("div", { className: "flex rounded-lg overflow-hidden border border-[#1E3D4F] mb-3" }, React.createElement("button", { onClick: () => setForm({ ...form, type: "agua" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "agua" ? "bg-[#4A8B8C] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "agua"), React.createElement("button", { onClick: () => setForm({ ...form, type: "seco" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "seco" ? "bg-[#FF6B35] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "seco"));
+                    const dateInput = React.createElement("div", { className: "mb-3" }, React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Fecha"), React.createElement("input", { type: "date", value: form.date, onChange: (e) => setForm({ ...form, date: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }));
                     const descInput = React.createElement("input", { placeholder: "Descripci\u00F3n (opcional)", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C] mb-3" });
                     const field = (label, inputEl) => React.createElement("div", null, React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, label), inputEl);
                     const blockRows = form.blocks.map((b, i) => {
@@ -881,7 +882,7 @@ function SwimCoach() {
                     const totalLine = React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mt-3" }, "Total: ", React.createElement("span", { className: "text-[#FF6B35] font-medium" }, totalMeters, "m"), " \u00B7 ", form.blocks.length, " l\u00EDnea", form.blocks.length > 1 ? "s" : "");
                     const aguaSection = form.type === "agua" && React.createElement(React.Fragment, null, blocksList, addLineBtn, totalLine);
                     const saveBtn = React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors mt-3 w-full sm:w-auto" }, "Guardar propuesta");
-                    return React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" }, React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."), typeToggle, descInput, aguaSection, saveBtn);
+                    return React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" }, React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."), typeToggle, dateInput, descInput, aguaSection, saveBtn);
                 })(),
                 React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets, onDelete: deleteSession })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
