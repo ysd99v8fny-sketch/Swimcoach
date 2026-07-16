@@ -363,7 +363,8 @@ function SessionCard({ s, sessions, paceTargets }) {
         .slice(0, 3)
         .reverse();
     const sparkValues = [...priorSwims.map((x) => paceToSeconds(x.pace)), paceSec].filter(Boolean);
-    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: "solid" } }, React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })), React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)), React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`), s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100")), sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }), s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))), s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)), deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`)), s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes));
+    const isPlanned = !!s.planned;
+    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, isPlanned && React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wide bg-[#E8C547]/15 text-[#E8C547] rounded-full px-2 py-0.5 shrink-0" }, "propuesta"), React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })), React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)), React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`), s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100")), sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }), s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))), s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)), deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`)), s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes));
 }
 // ---- Collapsible session log, grouped by year then month ------------------
 function SessionAccordion({ sessions, paceTargets }) {
@@ -549,7 +550,7 @@ function SwimCoach() {
     const [sessions, setSessions] = useState([]);
     const [loaded, setLoaded] = useState(false);
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ type: "agua", distance: "", pace: "", hr: "", notation: "", notes: "" });
+    const [form, setForm] = useState({ type: "agua", description: "", series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState("");
     const [paceTargets, setPaceTargets] = useState(() => {
@@ -594,9 +595,19 @@ function SwimCoach() {
         try {
             const res = await fetch("/api/sessions");
             const data = await res.json();
-            setSessions(Array.isArray(data) ? data : []);
+            let list = Array.isArray(data) ? data : [];
+            // Reconcile: if a "planned" proposal's date now has a real (non-planned) agua
+            // session from Strava, the plan has been fulfilled — drop the placeholder.
+            const fulfilled = list.filter((s) => s.planned && list.some((r) => !r.planned && r.type === "agua" && r.date === s.date));
+            if (fulfilled.length > 0) {
+                list = list.filter((s) => !fulfilled.includes(s));
+                fulfilled.forEach((s) => {
+                    fetch("/api/sessions", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id }) }).catch(() => { });
+                });
+            }
+            setSessions(list);
             try {
-                localStorage.setItem("swimcoach_sessions_cache", JSON.stringify(data));
+                localStorage.setItem("swimcoach_sessions_cache", JSON.stringify(list));
             }
             catch (e) { }
         }
@@ -636,22 +647,28 @@ function SwimCoach() {
         }
         setSyncing(false);
     };
+    const totalMeters = form.type === "agua" ? (Number(form.series) || 0) * (Number(form.meters) || 0) : 0;
     const addSession = async () => {
-        if (!form.distance && form.type === "agua")
+        if (form.type === "agua" && totalMeters <= 0)
             return;
+        const range = paceTargets[form.ritmo] || DEFAULT_PACE_TARGETS[form.ritmo];
+        const materialNote = form.material && form.material !== "ninguno" ? ` · ${form.material}` : "";
         const newSession = {
             id: uid(),
             type: form.type,
             date: new Date().toISOString().slice(0, 10),
-            distance: Number(form.distance) || 0,
-            pace: form.pace,
-            hr: form.hr,
-            notation: form.notation,
-            notes: form.notes,
+            distance: form.type === "agua" ? totalMeters : 0,
+            pace: form.type === "agua" && range ? secondsToPace((range[0] + range[1]) / 2) : "",
+            hr: "",
+            notation: form.type === "agua" ? form.ritmo : "",
+            notes: form.type === "agua"
+                ? `Propuesta: ${form.series}x${form.meters}m${materialNote}${form.description ? " · " + form.description : ""}`
+                : (form.description || ""),
+            planned: true,
         };
         // optimistic update
         setSessions((prev) => [newSession, ...prev]);
-        setForm({ type: "agua", distance: "", pace: "", hr: "", notation: "", notes: "" });
+        setForm({ type: "agua", description: "", series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
         setShowForm(false);
         try {
             await fetch("/api/sessions", {
@@ -803,17 +820,29 @@ function SwimCoach() {
                     React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4]" }, "Sesiones registradas"),
                     React.createElement("button", { onClick: () => setShowForm((s) => !s), className: "tap-target flex items-center gap-1 text-xs font-mono uppercase tracking-wide bg-[#142F42] hover:bg-[#1B3B52] border border-[#1E3D4F] rounded-full px-4 py-2.5 transition-colors" },
                         showForm ? React.createElement(Icon.X, { size: 13 }) : React.createElement(Icon.Plus, { size: 13 }),
-                        showForm ? "cerrar" : "añadir sesión")),
-                showForm && (React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3" },
-                    React.createElement("div", { className: "flex rounded-lg overflow-hidden border border-[#1E3D4F] col-span-2 sm:col-span-1" },
+                        showForm ? "cerrar" : "proponer sesión")),
+                showForm && (React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" },
+                    React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento \u2014 al sincronizar con Strava, se sustituye sola por los datos reales del d\u00EDa."),
+                    React.createElement("div", { className: "flex rounded-lg overflow-hidden border border-[#1E3D4F] mb-3" },
                         React.createElement("button", { onClick: () => setForm({ ...form, type: "agua" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "agua" ? "bg-[#4A8B8C] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "agua"),
                         React.createElement("button", { onClick: () => setForm({ ...form, type: "seco" }), className: `tap-target flex-1 text-xs font-mono uppercase py-2.5 transition-colors ${form.type === "seco" ? "bg-[#FF6B35] text-[#0B1F2E] font-semibold" : "bg-[#0B1F2E] text-[#7FA9AA]"}` }, "seco")),
-                    React.createElement("input", { placeholder: "metros", value: form.distance, onChange: (e) => setForm({ ...form, distance: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                    React.createElement("input", { placeholder: "ritmo /100m", value: form.pace, onChange: (e) => setForm({ ...form, pace: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                    React.createElement("input", { placeholder: "FC media", value: form.hr, onChange: (e) => setForm({ ...form, hr: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                    React.createElement("input", { placeholder: "notaci\u00F3n (AeM, A1...)", value: form.notation, onChange: (e) => setForm({ ...form, notation: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                    React.createElement("input", { placeholder: "notas (opcional)", value: form.notes, onChange: (e) => setForm({ ...form, notes: e.target.value }), style: { fontSize: 16 }, className: "col-span-2 sm:col-span-3 bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                    React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors" }, "Guardar"))),
+                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
+                        React.createElement("input", { placeholder: "Descripci\u00F3n", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), style: { fontSize: 16 }, className: "col-span-2 sm:col-span-4 bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
+                        form.type === "agua" && (React.createElement(React.Fragment, null,
+                            React.createElement("div", null,
+                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Series"),
+                                React.createElement("input", { type: "number", min: 1, max: 10, value: form.series, onChange: (e) => setForm({ ...form, series: Math.max(1, Math.min(10, Number(e.target.value) || 1)) }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" })),
+                            React.createElement("div", null,
+                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Metros"),
+                                React.createElement("input", { type: "number", min: 25, max: 5000, step: 25, value: form.meters, onChange: (e) => setForm({ ...form, meters: Math.max(25, Math.min(5000, Number(e.target.value) || 25)) }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" })),
+                            React.createElement("div", null,
+                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Ritmo"),
+                                React.createElement("select", { value: form.ritmo, onChange: (e) => setForm({ ...form, ritmo: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }, NOTATION_HELP.map((z) => React.createElement("option", { key: z, value: z }, z)))),
+                            React.createElement("div", null,
+                                React.createElement("label", { className: "block text-[9px] font-mono uppercase text-[#5A7A87] mb-1" }, "Material"),
+                                React.createElement("select", { value: form.material, onChange: (e) => setForm({ ...form, material: e.target.value }), style: { fontSize: 16 }, className: "w-full bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#4A8B8C]" }, ["ninguno", "palas", "aletas", "pullboy"].map((mtl) => React.createElement("option", { key: mtl, value: mtl }, mtl))))))),
+                    form.type === "agua" && React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mt-3" }, "Total: ", React.createElement("span", { className: "text-[#FF6B35] font-medium" }, totalMeters, "m"), ` \u00B7 ${form.series} \u00D7 ${form.meters}m`),
+                    React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors mt-3 w-full sm:w-auto" }, "Guardar propuesta"))),
                 React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
