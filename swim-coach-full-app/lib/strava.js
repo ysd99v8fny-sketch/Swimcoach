@@ -66,6 +66,11 @@ export function activityToSession(a) {
     const s = Math.round(secPer100 % 60);
     pace = `${m}:${String(s).padStart(2, "0")}`;
   }
+  // Pool swims are almost always recorded indoors with no GPS fix; open-water
+  // swims carry a real start_latlng. Not perfect (a poolside GPS blip could
+  // fool it occasionally) but a solid, zero-extra-cost heuristic.
+  const hasGps = Array.isArray(a.start_latlng) && a.start_latlng.length === 2;
+  const location = hasGps ? "abiertas" : "piscina";
   return {
     id: String(a.id),
     type: "agua",
@@ -74,6 +79,7 @@ export function activityToSession(a) {
     pace,
     hr: a.average_heartrate ? String(Math.round(a.average_heartrate)) : "",
     notation: "",
+    location,
     notes: a.name && !/^(Morning|Afternoon|Evening|Lunch|Night) Swim$/.test(a.name) ? a.name : "Strava",
   };
 }
