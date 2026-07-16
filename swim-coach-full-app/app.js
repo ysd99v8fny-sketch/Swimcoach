@@ -33,28 +33,52 @@ const TAPER_START = "2026-07-10";
 const PROGRESSION_START = "2026-01-01";
 const SEASON_START = "2025-09-01";
 const SEASON_END = "2026-10-05";
-const NOTATION_HELP = [
-    ["AeL", "Aeróbico ligero"],
-    ["AeM", "Aeróbico medio"],
-    ["A1", "Umbral aeróbico"],
-    ["A2", "Umbral anaeróbico"],
-    ["pns", "Pull + buoy sin paletas"],
-    ["pull", "Pull buoy"],
-    ["palas", "Paletas"],
-    ["aletas", "Aletas"],
-];
-// Target pace range per 100m (seconds) for each notation — used to flag sessions
-// that ran meaningfully faster/slower than intended.
-const PACE_TARGETS = {
-    AeL: [102, 110],
-    AeM: [100, 104],
-    A1: [93, 98],
-    A2: [82, 92],
-    pns: [98, 108],
-    pull: [95, 105],
-    palas: [88, 98],
-    aletas: [80, 92],
+// Zonas de ritmo, de más lenta a más rápida. Nota: interpreto la "AeL" repetida
+// entre AeM y Vo2Max como "AnL" (anaeróbico láctico) — el nombre estándar de esa
+// zona en esta progresión; dímelo si querías otra cosa.
+const NOTATION_HELP = ["Cal", "AeL1", "AeL2", "AeL3", "AeM", "AnL", "Vo2Max"];
+// Target pace range per 100m (seconds), slowest -> fastest. Used to flag sessions
+// that ran meaningfully faster/slower than intended, and shown in the Natación panel.
+// These are sensible defaults until calibrated against real Strava paces.
+const DEFAULT_PACE_TARGETS = {
+    Cal: [108, 120],
+    AeL1: [102, 108],
+    AeL2: [98, 102],
+    AeL3: [94, 98],
+    AeM: [90, 94],
+    AnL: [82, 90],
+    Vo2Max: [70, 82],
 };
+// ---- Calibrate pace zones from real Strava history -------------------------
+// Splits the distribution of observed swim paces into 7 bands (one per zone),
+// using the 4th/96th percentile as the outer bounds to avoid outliers.
+function calibratePaceTargets(sessions) {
+    const paces = sessions
+        .filter((s) => s.type !== "seco")
+        .map((s) => paceToSeconds(s.pace))
+        .filter((v) => v && v > 40 && v < 240)
+        .sort((a, b) => a - b);
+    if (paces.length < 10)
+        return null;
+    const quantile = (q) => {
+        const pos = q * (paces.length - 1);
+        const lo = Math.floor(pos), hi = Math.ceil(pos);
+        return paces[lo] + (paces[hi] - paces[lo]) * (pos - lo);
+    };
+    const fastest = quantile(0.04); // ~Vo2Max effort
+    const slowest = quantile(0.96); // ~Cal effort
+    const zones = NOTATION_HELP; // slowest -> fastest order
+    const n = zones.length;
+    const step = (slowest - fastest) / n;
+    const targets = {};
+    zones.forEach((z, i) => {
+        // i=0 is slowest (Cal): upper bound = slowest, lower bound = slowest - step
+        const hi = Math.round(slowest - i * step);
+        const lo = Math.round(slowest - (i + 1) * step);
+        targets[z] = [lo, hi];
+    });
+    return targets;
+}
 // Rough HR zones based on observed max HR in the training log (~172 bpm ceiling).
 const MAX_HR = 172;
 const HR_ZONES = [
@@ -121,6 +145,11 @@ function paceToSeconds(pace) {
     if (Number.isNaN(m) || Number.isNaN(s))
         return null;
     return m * 60 + s;
+}
+function secondsToPace(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
 }
 function getWeekStart(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
@@ -314,11 +343,11 @@ function Sparkline({ values }) {
         React.createElement("polyline", { points: pts.join(" "), fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })));
 }
 // ---- Single session row (used by the year/month accordion) ----------------
-function SessionCard({ s, sessions }) {
+function SessionCard({ s, sessions, paceTargets }) {
     const zone = hrZone(s.hr);
     const paceSec = paceToSeconds(s.pace);
     const primaryNotation = s.notation ? s.notation.split(/[\/,]/)[0].trim() : null;
-    const target = primaryNotation ? PACE_TARGETS[primaryNotation] : null;
+    const target = primaryNotation ? (paceTargets || DEFAULT_PACE_TARGETS)[primaryNotation] : null;
     let deviation = null;
     if (target && paceSec) {
         if (paceSec < target[0])
@@ -337,7 +366,7 @@ function SessionCard({ s, sessions }) {
     return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: "solid" } }, React.createElement("span", { className: "shrink-0", title: isDry ? "Sesión en seco" : "Sesión en agua" }, isDry ? React.createElement(Icon.Anchor, { size: 14, className: "text-[#5A7A87] opacity-50" }) : React.createElement(Icon.Waves, { size: 14, className: "text-[#4A8B8C]" })), React.createElement("span", { className: "font-mono text-[#7FA9AA] w-16 shrink-0" }, fmtDate(s.date)), React.createElement("span", { className: "font-mono font-medium w-20 shrink-0" }, isDry ? "—" : `${s.distance}m`), s.pace && (React.createElement("span", { className: "font-mono text-[#9FB8C4] w-24 shrink-0 flex items-center gap-1" }, React.createElement(Icon.Timer, { size: 12 }), s.pace, "/100")), sparkValues.length >= 2 && React.createElement(Sparkline, { values: sparkValues }), s.hr && (React.createElement("span", { className: "font-mono text-[#9FB8C4] shrink-0 flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full shrink-0", style: { background: zone?.color || "#5A7A87" } }), s.hr, " bpm", zone && React.createElement("span", { className: "text-[9px] text-[#5A7A87] ml-0.5" }, `\u00b7${zone.key}`))), s.notation && (React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation)), deviation && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "\u26A0 ", deviation, ` (obj. ${target[0]}-${target[1]}s)`)), s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes));
 }
 // ---- Collapsible session log, grouped by year then month ------------------
-function SessionAccordion({ sessions }) {
+function SessionAccordion({ sessions, paceTargets }) {
     const currentYear = String(TODAY.getFullYear());
     const currentMonth = TODAY.getMonth();
     const years = useMemo(() => groupByYearMonth(sessions), [sessions]);
@@ -373,7 +402,7 @@ function SessionAccordion({ sessions }) {
                             React.createElement("span", { className: "inline-block text-[#4A8B8C] text-xs transition-transform", style: { transform: monthOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "\u25B8"),
                             mo.label),
                         React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" }, (mo.meters / 1000).toFixed(1), "km \u00B7 ", mo.items.length, " sesiones")),
-                    monthOpen && React.createElement("div", { className: "p-2.5 space-y-2 bg-[#0B1F2E]" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions }))));
+                    monthOpen && React.createElement("div", { className: "p-2.5 space-y-2 bg-[#0B1F2E]" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions, paceTargets: paceTargets }))));
             })));
     }));
 }
@@ -523,6 +552,33 @@ function SwimCoach() {
     const [form, setForm] = useState({ type: "agua", distance: "", pace: "", hr: "", notation: "", notes: "" });
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState("");
+    const [paceTargets, setPaceTargets] = useState(() => {
+        try {
+            const saved = localStorage.getItem("swimcoach_pace_targets");
+            return saved ? JSON.parse(saved) : DEFAULT_PACE_TARGETS;
+        }
+        catch (e) {
+            return DEFAULT_PACE_TARGETS;
+        }
+    });
+    const [calibrating, setCalibrating] = useState(false);
+    const [calibrateMsg, setCalibrateMsg] = useState("");
+    const runCalibration = () => {
+        setCalibrating(true);
+        const result = calibratePaceTargets(sessions);
+        if (result) {
+            setPaceTargets(result);
+            try {
+                localStorage.setItem("swimcoach_pace_targets", JSON.stringify(result));
+            }
+            catch (e) { }
+            setCalibrateMsg(`✓ ritmos actualizados con ${sessions.filter((s) => s.type !== "seco").length} sesiones`);
+        }
+        else {
+            setCalibrateMsg("Necesito al menos 10 sesiones de piscina con ritmo registrado.");
+        }
+        setCalibrating(false);
+    };
     const [messages, setMessages] = useState([
         {
             role: "assistant",
@@ -758,13 +814,22 @@ function SwimCoach() {
                     React.createElement("input", { placeholder: "notaci\u00F3n (AeM, A1...)", value: form.notation, onChange: (e) => setForm({ ...form, notation: e.target.value }), style: { fontSize: 16 }, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
                     React.createElement("input", { placeholder: "notas (opcional)", value: form.notes, onChange: (e) => setForm({ ...form, notes: e.target.value }), style: { fontSize: 16 }, className: "col-span-2 sm:col-span-3 bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
                     React.createElement("button", { onClick: addSession, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] font-semibold rounded-lg px-3 py-2.5 text-sm transition-colors" }, "Guardar"))),
-                React.createElement(SessionAccordion, { sessions: sessions })),
+                React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Notaci\u00F3n"),
-                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, NOTATION_HELP.map(([abbr, desc]) => (React.createElement("div", { key: abbr, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg px-3 py-2" },
-                    React.createElement("div", { className: "font-mono text-[#FF6B35] text-sm font-medium" }, abbr),
-                    React.createElement("div", { className: "text-[11px] text-[#9FB8C4]" }, desc))))),
+                React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 mb-1" },
+                    React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4]" }, "Nataci\u00F3n"),
+                    React.createElement("button", { onClick: runCalibration, disabled: calibrating, className: "tap-target flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide bg-[#142F42] hover:bg-[#1B3B52] disabled:opacity-50 border border-[#1E3D4F] rounded-full px-4 py-2.5 transition-colors" },
+                        React.createElement(Icon.Loader2, { size: 12, className: calibrating ? "animate-spin" : "" }),
+                        "actualizar ritmos con Strava")),
+                calibrateMsg && React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mb-3" }, calibrateMsg),
+                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "de m\u00E1s lento a m\u00E1s r\u00E1pido \u00B7 ritmo por 100m"),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, NOTATION_HELP.map((zone) => {
+                    const range = paceTargets[zone] || DEFAULT_PACE_TARGETS[zone];
+                    return React.createElement("div", { key: zone, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg px-3 py-2" },
+                        React.createElement("div", { className: "font-mono text-[#FF6B35] text-sm font-medium" }, zone),
+                        range && React.createElement("div", { className: "text-[11px] text-[#9FB8C4] font-mono" }, secondsToPace(range[0]), "\u2013", secondsToPace(range[1])));
+                })),
                 React.createElement("div", { className: "font-display uppercase text-xs tracking-wider text-[#9FB8C4] mt-5 mb-2" },
                     "Zonas de FC (estimadas, m\u00E1x. ",
                     MAX_HR,
