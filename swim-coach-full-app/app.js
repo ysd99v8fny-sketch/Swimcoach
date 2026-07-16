@@ -341,10 +341,41 @@ function SessionAccordion({ sessions }) {
     const currentYear = String(TODAY.getFullYear());
     const currentMonth = TODAY.getMonth();
     const years = useMemo(() => groupByYearMonth(sessions), [sessions]);
+    const [openYears, setOpenYears] = useState(() => new Set([currentYear]));
+    const [openMonths, setOpenMonths] = useState(() => new Set([`${currentYear}-${currentMonth}`]));
+    const toggleYear = (y) => setOpenYears((prev) => {
+        const next = new Set(prev);
+        next.has(y) ? next.delete(y) : next.add(y);
+        return next;
+    });
+    const toggleMonth = (key) => setOpenMonths((prev) => {
+        const next = new Set(prev);
+        next.has(key) ? next.delete(key) : next.add(key);
+        return next;
+    });
     if (years.length === 0) {
         return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono py-6 text-center border border-dashed border-[#1E3D4F] rounded-2xl" }, "Todav\u00EDa no hay sesiones \u2014 a\u00F1ade la primera.");
     }
-    return React.createElement("div", { className: "space-y-2" }, years.map((y) => React.createElement("details", { key: y.year, open: y.year === currentYear, className: "group" }, React.createElement("summary", { className: "tap-target flex items-center justify-between cursor-pointer select-none bg-[#142F42] hover:bg-[#1B3B52] border border-[#1E3D4F] rounded-xl px-4 py-3 font-display uppercase text-sm tracking-wide list-none" }, React.createElement("span", { className: "flex items-center gap-2" }, React.createElement("span", { className: "inline-block transition-transform group-open:rotate-90 text-[#7FA9AA]" }, "\u25B8"), y.year), React.createElement("span", { className: "font-mono text-[11px] text-[#7FA9AA] normal-case tracking-normal" }, (y.meters / 1000).toFixed(1), "km")), React.createElement("div", { className: "pl-2 sm:pl-4 mt-2 space-y-2 border-l border-[#1E3D4F] ml-2" }, y.months.map((mo) => React.createElement("details", { key: mo.month, open: y.year === currentYear && mo.month === currentMonth, className: "group/month" }, React.createElement("summary", { className: "tap-target flex items-center justify-between cursor-pointer select-none bg-[#0E2634] hover:bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 text-sm capitalize list-none" }, React.createElement("span", { className: "flex items-center gap-2" }, React.createElement("span", { className: "inline-block transition-transform group-open/month:rotate-90 text-[#5A7A87] text-xs" }, "\u25B8"), mo.label), React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" }, (mo.meters / 1000).toFixed(1), "km \u00B7 ", mo.items.length, " sesiones")), React.createElement("div", { className: "space-y-2 mt-2" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions })))))))));
+    return React.createElement("div", { className: "space-y-3" }, years.map((y) => {
+        const yearOpen = openYears.has(y.year);
+        return React.createElement("div", { key: y.year, className: "rounded-xl border border-[#1E3D4F] overflow-hidden" },
+            React.createElement("button", { onClick: () => toggleYear(y.year), className: "tap-target w-full flex items-center justify-between bg-[#142F42] hover:bg-[#1B3B52] px-4 py-3 font-display uppercase text-base tracking-wide transition-colors" },
+                React.createElement("span", { className: "flex items-center gap-2.5" },
+                    React.createElement("span", { className: "inline-block text-[#FF6B35] transition-transform", style: { transform: yearOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "\u25B8"),
+                    y.year),
+                React.createElement("span", { className: "font-mono text-[11px] text-[#7FA9AA] normal-case tracking-normal" }, (y.meters / 1000).toFixed(1), "km \u00B7 ", y.months.reduce((n, mo) => n + mo.items.length, 0), " sesiones")),
+            yearOpen && React.createElement("div", { className: "bg-[#0B1F2E] p-3 space-y-2" }, y.months.map((mo) => {
+                const key = `${y.year}-${mo.month}`;
+                const monthOpen = openMonths.has(key);
+                return React.createElement("div", { key: key, className: "rounded-lg border border-[#1E3D4F] overflow-hidden ml-2 sm:ml-4" },
+                    React.createElement("button", { onClick: () => toggleMonth(key), className: "tap-target w-full flex items-center justify-between bg-[#0E2634] hover:bg-[#142F42] px-3 py-2.5 text-sm capitalize transition-colors" },
+                        React.createElement("span", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "inline-block text-[#4A8B8C] text-xs transition-transform", style: { transform: monthOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "\u25B8"),
+                            mo.label),
+                        React.createElement("span", { className: "font-mono text-[10px] text-[#5A7A87]" }, (mo.meters / 1000).toFixed(1), "km \u00B7 ", mo.items.length, " sesiones")),
+                    monthOpen && React.createElement("div", { className: "p-2.5 space-y-2 bg-[#0B1F2E]" }, mo.items.map((s) => React.createElement(SessionCard, { key: s.id, s: s, sessions: sessions }))));
+            })));
+    }));
 }
 
 // Simplified fitness/fatigue/form model (Coggan PMC-style), using distance
@@ -402,35 +433,37 @@ function FitnessForm({ sessions }) {
     }
     const last = series[series.length - 1];
     const form = formLabel(last.tsb);
-    const recent = series.slice(-42); // last 6 weeks for the sparkline
-    const maxAbs = Math.max(...recent.map((p) => Math.abs(p.tsb)), 10);
+    const recent = series.slice(-42); // last 6 weeks
+    // gauge: clamp TSB to a fixed, readable range
+    const GAUGE_MIN = -30, GAUGE_MAX = 25;
+    const clamped = Math.max(GAUGE_MIN, Math.min(GAUGE_MAX, last.tsb));
+    const gaugePct = ((clamped - GAUGE_MIN) / (GAUGE_MAX - GAUGE_MIN)) * 100;
+    // simple single-line trend (not two-directional bars) for the last 6 weeks
+    const W = 100, H = 40, pad = 3;
+    const tsbVals = recent.map((p) => p.tsb);
+    const tMin = Math.min(...tsbVals, 0), tMax = Math.max(...tsbVals, 0);
+    const tRange = tMax - tMin || 1;
+    const xFor = (i) => pad + (i / (recent.length - 1 || 1)) * (W - pad * 2);
+    const yFor = (v) => pad + (1 - (v - tMin) / tRange) * (H - pad * 2);
+    const zeroY = yFor(0);
+    const lineD = recent.map((p, i) => `${i === 0 ? "M" : "L"}${xFor(i).toFixed(1)},${yFor(p.tsb).toFixed(1)}`).join(" ");
     return (React.createElement("div", { className: "w-full" },
-        React.createElement("div", { className: "flex flex-wrap items-end gap-6 mb-4" },
+        React.createElement("div", { className: "flex flex-wrap items-center gap-4 mb-4" },
+            React.createElement("div", { className: "font-display text-4xl", style: { color: form.color } },
+                last.tsb > 0 ? "+" : "",
+                last.tsb.toFixed(0)),
             React.createElement("div", null,
-                React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "CTL \u00B7 fitness"),
-                React.createElement("div", { className: "font-display text-2xl text-[#4A8B8C]" }, last.ctl.toFixed(0))),
-            React.createElement("div", null,
-                React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "ATL \u00B7 fatiga"),
-                React.createElement("div", { className: "font-display text-2xl text-[#FF6B35]" }, last.atl.toFixed(0))),
-            React.createElement("div", null,
-                React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "TSB \u00B7 forma"),
-                React.createElement("div", { className: "font-display text-2xl", style: { color: form.color } },
-                    last.tsb > 0 ? "+" : "",
-                    last.tsb.toFixed(0))),
-            React.createElement("div", { className: "flex-1 min-w-[140px]" },
                 React.createElement("span", { className: "font-mono text-[11px] rounded-full px-3 py-1 inline-block", style: { background: `${form.color}22`, color: form.color } }, form.label),
                 React.createElement("div", { className: "text-[10px] text-[#5A7A87] mt-1" }, form.note))),
-        React.createElement("div", { className: "h-16 flex items-end gap-[1px]" }, recent.map((p, i) => {
-            const h = 4 + (Math.abs(p.tsb) / maxAbs) * 56;
-            const isPositive = p.tsb >= 0;
-            return (React.createElement("div", { key: p.date, className: "flex-1", style: {
-                    height: `${h}px`,
-                    alignSelf: isPositive ? "flex-end" : "flex-start",
-                    background: isPositive ? "#7FA9AA" : "#FF6B35",
-                    opacity: 0.7,
-                }, title: `${p.date}: TSB ${p.tsb.toFixed(1)}` }));
-        })),
-        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-1" }, "\u00FAltimas 6 semanas \u00B7 barras hacia arriba = forma positiva")));
+        React.createElement("div", { className: "relative h-2 rounded-full mb-1", style: { background: "linear-gradient(90deg, #FF6B35 0%, #E8C547 40%, #7FA9AA 65%, #4A8B8C 100%)" } },
+            React.createElement("div", { className: "absolute top-1/2 w-3 h-3 rounded-full bg-white border-2 shadow", style: { left: `${gaugePct}%`, transform: "translate(-50%, -50%)", borderColor: form.color } })),
+        React.createElement("div", { className: "flex justify-between text-[9px] font-mono text-[#5A7A87] mb-4" },
+            React.createElement("span", null, "cansado"),
+            React.createElement("span", null, "fresco")),
+        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-10", preserveAspectRatio: "none" },
+            React.createElement("line", { x1: 0, x2: W, y1: zeroY, y2: zeroY, stroke: "#1E3D4F", strokeWidth: "1", vectorEffect: "non-scaling-stroke" }),
+            React.createElement("path", { d: lineD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.3", vectorEffect: "non-scaling-stroke" })),
+        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-1" }, "tendencia \u00FAltimas 6 semanas \u00B7 l\u00EDnea por encima = mejor forma")));
 }
 // ---- Training heatmap (GitHub-style, last 26 weeks) ------------------
 function TrainingHeatmap({ sessions }) {
