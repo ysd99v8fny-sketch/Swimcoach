@@ -522,6 +522,76 @@ function computePeakCurve(sessions) {
         return { ...b, best: best.sec, date: best.s.date };
     });
 }
+
+// ---- Time-in-zone distribution -----------------------------------------
+// Classifies every synced session's actual pace against the calibrated zone
+// ranges, then sums the distance swum in each zone — a real 80/20-style view
+// of where your volume actually goes, not just what you planned.
+const ZONE_COLORS = {
+    Cal: "#3E5A68", AeL1: "#4A8B8C", AeL2: "#7FA9AA", AeL3: "#E8C547",
+    AeM: "#FF9A5A", AnL: "#FF6B35", Vo2Max: "#E8453C",
+};
+function classifyZone(paceSec, paceTargets) {
+    let best = null, bestDist = Infinity;
+    NOTATION_HELP.forEach((z) => {
+        const r = paceTargets[z] || DEFAULT_PACE_TARGETS[z];
+        if (!r)
+            return;
+        if (paceSec >= r[0] && paceSec <= r[1]) {
+            best = z;
+            bestDist = 0;
+            return;
+        }
+        const d = paceSec < r[0] ? r[0] - paceSec : paceSec - r[1];
+        if (d < bestDist) {
+            bestDist = d;
+            best = z;
+        }
+    });
+    return best;
+}
+function computeZoneDistribution(sessions, paceTargets) {
+    const cutoff = new Date(TODAY);
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const totals = {};
+    NOTATION_HELP.forEach((z) => { totals[z] = 0; });
+    let totalMeters = 0;
+    sessions.forEach((s) => {
+        if (s.type === "seco" || s.planned || s.date < cutoffStr)
+            return;
+        const sec = paceToSeconds(s.pace);
+        if (!sec || !s.distance)
+            return;
+        const zone = classifyZone(sec, paceTargets);
+        if (!zone)
+            return;
+        totals[zone] += s.distance;
+        totalMeters += s.distance;
+    });
+    return { totals, totalMeters };
+}
+function ZoneDistribution({ sessions, paceTargets }) {
+    const { totals, totalMeters } = useMemo(() => computeZoneDistribution(sessions, paceTargets), [sessions, paceTargets]);
+    if (totalMeters === 0) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos suficientes todav\u00EDa.");
+    }
+    return React.createElement("div", { className: "w-full" },
+        React.createElement("div", { className: "flex h-6 rounded-full overflow-hidden border border-[#1E3D4F]" }, NOTATION_HELP.map((z) => {
+            const pct = (totals[z] / totalMeters) * 100;
+            if (pct <= 0)
+                return null;
+            return React.createElement("div", { key: z, style: { width: `${pct}%`, background: ZONE_COLORS[z] }, title: `${z}: ${pct.toFixed(0)}%` });
+        })),
+        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3" }, NOTATION_HELP.map((z) => {
+            const pct = (totals[z] / totalMeters) * 100;
+            return React.createElement("div", { key: z, className: "flex items-center gap-2" },
+                React.createElement("span", { className: "w-2.5 h-2.5 rounded-full shrink-0", style: { background: ZONE_COLORS[z] } }),
+                React.createElement("span", { className: "font-mono text-[11px] text-[#9FB8C4]" }, z, " \u00B7 ", pct.toFixed(0), "%"));
+        })),
+        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-3" }, "\u00FAltimos 12 meses \u00B7 ", (totalMeters / 1000).toFixed(0), "km clasificados por ritmo real"));
+}
+
 function PeakCurve({ sessions }) {
     const curve = useMemo(() => computePeakCurve(sessions), [sessions]);
     const withData = curve.filter((b) => b.best);
@@ -984,6 +1054,7 @@ function SwimCoach() {
                 ["#condiciones", "Condiciones"],
                 ["#prediccion", "Predicci\u00F3n"],
                 ["#curva", "Curva"],
+                ["#zonas", "Zonas"],
                 ["#calendario", "Calendario"],
                 ["#registro", "Registro"],
                 ["#natacion", "Nataci\u00F3n"],
@@ -1063,6 +1134,9 @@ function SwimCoach() {
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement(CollapsibleSection, { id: "curva", title: "Curva de mejor esfuerzo" },
                 React.createElement(PeakCurve, { sessions: sessions })),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement(CollapsibleSection, { id: "zonas", title: "Distribuci\u00F3n de zonas", subtitle: "d\u00F3nde va tu volumen real, no el planificado" },
+                React.createElement(ZoneDistribution, { sessions: sessions, paceTargets: paceTargets })),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "calendario", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Calendario de entrenamiento \u2014 \u00FAltimas 26 semanas"),
