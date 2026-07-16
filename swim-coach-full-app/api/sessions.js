@@ -25,6 +25,7 @@ export default async function handler(req, res) {
       hr: body.hr || "",
       notation: body.notation || "",
       notes: body.notes || "",
+      location: body.location || "piscina",
       planned: !!body.planned,
     };
     const sessions = await addManualSession(session);
