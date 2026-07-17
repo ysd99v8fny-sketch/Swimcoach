@@ -234,7 +234,7 @@ function CollapsibleSection({ id, title, subtitle, defaultOpen, card, children }
         React.createElement("button", { onClick: () => setOpen((v) => !v), className: "tap-target w-full flex items-center justify-between gap-2 mb-1 text-left" },
             React.createElement("div", null,
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4]" }, title),
-                subtitle && React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mt-0.5" }, subtitle)),
+                subtitle && React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mt-0.5" }, subtitle)),
             React.createElement("span", { className: "inline-block text-[#4A8B8C] transition-transform shrink-0", style: { transform: open ? "rotate(90deg)" : "rotate(0deg)" } }, "▸")),
         open && React.createElement("div", { className: "mt-3" }, children));
 }
@@ -516,8 +516,8 @@ function RacePrediction({ sessions, race }) {
     }
     return React.createElement("div", { className: "flex flex-wrap items-center gap-4" },
         React.createElement("div", null,
-            React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "Tiempo estimado"),
-            React.createElement("div", { className: "font-display text-3xl text-[#FF6B35]" }, fmtDuration(pred.totalSec))),
+            React.createElement("div", { className: "font-mono text-[10px] uppercase tracking-wider text-[#7FA9AA]" }, "Tiempo estimado"),
+            React.createElement("div", { className: "font-display text-5xl text-[#FF6B35]" }, fmtDuration(pred.totalSec))),
         React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono max-w-xs" },
             "basado en tu mejor ritmo reciente (", fmtDate(pred.refDate), ", ", pred.refDistance, "m", pred.refWasPool ? ", piscina +conversión" : "", ") · modelo Riegel, orientativo"));
 }
@@ -560,13 +560,13 @@ function PredictionTrend({ sessions, race }) {
     const improving = deltaSec > 0;
     return (React.createElement("div", { className: "mt-3 pt-3 border-t border-[#1E3D4F]" },
         React.createElement("div", { className: "flex items-center justify-between mb-1" },
-            React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "Evolución (26 semanas)"),
+            React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#7FA9AA]" }, "Evolución (26 semanas)"),
             React.createElement("span", { className: `font-mono text-[10px] ${improving ? "text-[#4A8B8C]" : "text-[#FF6B35]"}` },
                 improving ? "▼ " : "▲ ",
                 fmtDuration(Math.abs(deltaSec)))),
         React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-8", preserveAspectRatio: "none" },
             React.createElement("path", { d: pathD, fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.3", vectorEffect: "non-scaling-stroke" })),
-        React.createElement("div", { className: "flex justify-between text-[9px] font-mono text-[#5A7A87] mt-1" },
+        React.createElement("div", { className: "flex justify-between text-[9px] font-mono text-[#7FA9AA] mt-1" },
             React.createElement("span", null, fmtDate(points[0].date)),
             React.createElement("span", null, fmtDate(points[points.length - 1].date)))));
 }
@@ -700,7 +700,7 @@ function FitnessForm({ sessions }) {
     const lineD = recent.map((p, i) => `${i === 0 ? "M" : "L"}${xFor(i).toFixed(1)},${yFor(p.tsb).toFixed(1)}`).join(" ");
     return (React.createElement("div", { className: "w-full" },
         React.createElement("div", { className: "flex flex-wrap items-center gap-4 mb-4" },
-            React.createElement("div", { className: "font-display text-4xl", style: { color: form.color } },
+            React.createElement("div", { className: "font-display text-5xl", style: { color: form.color } },
                 last.tsb > 0 ? "+" : "",
                 last.tsb.toFixed(0)),
             React.createElement("div", null,
@@ -714,7 +714,7 @@ function FitnessForm({ sessions }) {
         React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-10", preserveAspectRatio: "none" },
             React.createElement("line", { x1: 0, x2: W, y1: zeroY, y2: zeroY, stroke: "#1E3D4F", strokeWidth: "1", vectorEffect: "non-scaling-stroke" }),
             React.createElement("path", { d: lineD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.3", vectorEffect: "non-scaling-stroke" })),
-        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-1" }, "tendencia últimas 6 semanas · línea por encima = mejor forma")));
+        React.createElement("div", { className: "text-[10px] font-mono text-[#7FA9AA] mt-1" }, "tendencia últimas 6 semanas · línea por encima = mejor forma")));
 }
 // ---- Training heatmap (GitHub-style, last 26 weeks) ------------------
 function TrainingHeatmap({ sessions }) {
@@ -763,7 +763,7 @@ function TrainingHeatmap({ sessions }) {
     };
     const grid = React.createElement("div", { className: "flex gap-[3px] w-max" }, columns.map((week, wi) => React.createElement("div", { key: wi, className: "flex flex-col gap-[3px]" }, week.map((day) => React.createElement("div", { key: day.date, className: "w-[11px] h-[11px] rounded-sm", style: { background: bucket(day.meters) }, title: `${day.date}: ${day.meters ? day.meters + "m" : "descanso"}` })))));
     const scrollBox = React.createElement("div", { ref: scrollRef, className: "w-full overflow-x-auto scroll-fade" }, grid);
-    const legend = React.createElement("div", { className: "flex items-center justify-between mt-2" }, React.createElement("span", { className: "text-[9px] font-mono text-[#5A7A87] sm:hidden" }, "← desliza para ver el historial"), React.createElement("div", { className: "flex items-center gap-1.5 text-[9px] font-mono text-[#5A7A87]" }, React.createElement("span", null, "menos"), ["#142F42", "#1E3D4F", "#2E6470", "#4A8B8C", "#7FA9AA"].map((c) => React.createElement("span", { key: c, className: "w-[10px] h-[10px] rounded-sm", style: { background: c } })), React.createElement("span", null, "más")));
+    const legend = React.createElement("div", { className: "flex items-center justify-between mt-2" }, React.createElement("span", { className: "text-[9px] font-mono text-[#7FA9AA] sm:hidden" }, "← desliza para ver el historial"), React.createElement("div", { className: "flex items-center gap-1.5 text-[9px] font-mono text-[#7FA9AA]" }, React.createElement("span", null, "menos"), ["#142F42", "#1E3D4F", "#2E6470", "#4A8B8C", "#7FA9AA"].map((c) => React.createElement("span", { key: c, className: "w-[10px] h-[10px] rounded-sm", style: { background: c } })), React.createElement("span", null, "más")));
     return React.createElement("div", { className: "w-full" }, scrollBox, legend);
 }
 // ---- Main app ---------------------------------------------------------
@@ -816,6 +816,23 @@ function SwimCoach() {
         window.addEventListener("scroll", onScroll, { passive: true });
         return () => window.removeEventListener("scroll", onScroll);
     }, []);
+    // ---- Scroll-spy for the section nav — highlights whichever section is
+    // currently in view instead of a static list of links. ----------------
+    const [activeSection, setActiveSection] = useState("temporada");
+    useEffect(() => {
+        const ids = ["temporada", "condiciones", "prediccion", "calendario", "registro", "natacion", "chat"];
+        const els = ids.map((id) => document.getElementById(id)).filter(Boolean);
+        if (els.length === 0)
+            return;
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting)
+                    setActiveSection(entry.target.id);
+            });
+        }, { rootMargin: "-35% 0px -55% 0px" });
+        els.forEach((el) => observer.observe(el));
+        return () => observer.disconnect();
+    }, [loaded]);
     const nextRace = RACES.find((r) => new Date(r.date) >= TODAY) || RACES[RACES.length - 1];
     const daysLeft = daysBetween(TODAY, nextRace.date);
     const loadSessions = async () => {
@@ -1003,16 +1020,16 @@ function SwimCoach() {
                     React.createElement("button", { onClick: runSync, disabled: syncing, className: "tap-target flex items-center justify-center gap-1.5 text-[11px] font-mono uppercase tracking-wide bg-[#142F42] hover:bg-[#1B3B52] disabled:opacity-50 border border-[#1E3D4F] rounded-full px-4 py-2.5 transition-colors w-full sm:w-auto" },
                         React.createElement(Icon.Loader2, { size: 12, className: syncing ? "animate-spin" : "" }),
                         syncing ? "sincronizando..." : "sincronizar Strava"),
-                    syncMsg && React.createElement("span", { className: "text-[10px] font-mono text-[#5A7A87]" }, syncMsg))),
+                    syncMsg && React.createElement("span", { className: "text-[10px] font-mono text-[#7FA9AA]" }, syncMsg))),
             React.createElement("div", { className: "flex gap-3 overflow-x-auto scroll-fade mb-6 pb-1 -mx-5 px-5 sm:mx-0 sm:px-0" }, [
-                ["#chat", "Entrenador"],
-                ["#temporada", "Temporada"],
-                ["#condiciones", "Condiciones"],
-                ["#prediccion", "Predicción"],
-                ["#calendario", "Calendario"],
-                ["#registro", "Registro"],
-                ["#natacion", "Natación"],
-            ].map(([href, label]) => React.createElement("a", { key: href, href: href, className: "shrink-0 font-mono text-[10px] uppercase tracking-wide text-[#5A7A87] hover:text-[#4A8B8C] transition-colors border-b border-transparent hover:border-[#4A8B8C] pb-0.5" }, label))),
+                ["#temporada", "Temporada", "temporada"],
+                ["#condiciones", "Condiciones", "condiciones"],
+                ["#prediccion", "Predicción", "prediccion"],
+                ["#calendario", "Calendario", "calendario"],
+                ["#registro", "Registro", "registro"],
+                ["#natacion", "Natación", "natacion"],
+                ["#chat", "Entrenador", "chat"],
+            ].map(([href, label, id]) => React.createElement("a", { key: href, href: href, className: `shrink-0 font-mono text-[10px] uppercase tracking-wide transition-colors border-b pb-0.5 ${activeSection === id ? "text-[#FF6B35] border-[#FF6B35]" : "text-[#7FA9AA] hover:text-[#4A8B8C] border-transparent hover:border-[#4A8B8C]"}` }, label))),
             React.createElement("div", { className: "mb-8" },
                 React.createElement("div", { className: "flex items-end gap-4 flex-wrap" },
                     React.createElement("div", { className: "font-display text-[88px] leading-none font-semibold tabular-nums transition-colors duration-700", style: { color: daysLeft <= 3 ? "#E8453C" : daysLeft <= 10 ? "#FF6B35" : "#4A8B8C" } }, daysLeft),
@@ -1028,23 +1045,6 @@ function SwimCoach() {
                             nextRace.phase))),
                 React.createElement("div", { className: "mt-2 text-sm text-[#9FB8C4] max-w-xl" }, "Última semana de puesta a punto. Volumen bajo, intensidad mantenida, prioridad al descanso.")),
             React.createElement(WaveDivider, null),
-            React.createElement("div", { id: "chat", className: "my-8 scroll-mt-20" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Entrenador"),
-                React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl flex flex-col h-[420px]" },
-                    React.createElement("div", { className: "flex-1 overflow-y-auto p-4 space-y-3" },
-                        messages.map((m, i) => (React.createElement("div", { key: i, className: `flex ${m.role === "user" ? "justify-end" : "justify-start"}` },
-                            React.createElement("div", { className: `max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user"
-                                    ? "bg-[#FF6B35] text-[#0B1F2E] font-medium rounded-br-sm"
-                                    : "bg-[#142F42] text-[#EAF2F2] rounded-bl-sm border border-[#1E3D4F]"}` }, m.text)))),
-                        sending && (React.createElement("div", { className: "flex justify-start" },
-                            React.createElement("div", { className: "bg-[#142F42] border border-[#1E3D4F] rounded-2xl rounded-bl-sm px-4 py-2.5" },
-                                React.createElement(Icon.Loader2, { size: 14, className: "animate-spin text-[#7FA9AA]" })))),
-                        React.createElement("div", { ref: chatEndRef })),
-                    React.createElement("div", { className: "border-t border-[#1E3D4F] p-3 flex gap-2 safe-bottom" },
-                        React.createElement("input", { value: input, onChange: (e) => setInput(e.target.value), onFocus: (e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300), onKeyDown: (e) => e.key === "Enter" && send(), placeholder: "Pregunta o pide una sesión...", style: { fontSize: 16 }, className: "flex-1 bg-[#0B1F2E] border border-[#1E3D4F] rounded-full px-4 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
-                        React.createElement("button", { onClick: send, disabled: sending, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] disabled:opacity-50 text-[#0B1F2E] rounded-full flex items-center justify-center shrink-0 transition-colors" },
-                            React.createElement(Icon.Send, { size: 15 }))))),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "temporada", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Temporada — sep 25 a oct 26"),
                 React.createElement(TideTimeline, null),
@@ -1070,17 +1070,14 @@ function SwimCoach() {
                 React.createElement("div", { className: "mt-6" },
                     React.createElement("div", { className: "font-display uppercase text-xs tracking-wider text-[#9FB8C4] mb-2" }, "Ritmo medio por mes"),
                     React.createElement(PaceByPhaseChart, { sessions: sessions }))),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Forma (fitness / fatiga)"),
-                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "modelo simplificado CTL/ATL/TSB basado en volumen — orientativo, no un TSS real"),
+                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "modelo simplificado CTL/ATL/TSB basado en volumen — orientativo, no un TSS real"),
                 React.createElement(FitnessForm, { sessions: sessions })),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement(CollapsibleSection, {
                 id: "condiciones", title: `Condiciones — ${nextRace.name}`,
                 subtitle: "previsión en vivo, no histórica · disponible desde 15 días antes de la carrera",
             }, React.createElement(ConditionsWidget, { race: nextRace })),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement(CollapsibleSection, { id: "prediccion", title: "Predicción de tiempo" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" }, RACES.map((race) => React.createElement("div", { key: race.id, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-xl p-4" },
                     React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mb-2" }, race.name, " · ", race.distance.toLocaleString("es-ES"), "m"),
@@ -1090,7 +1087,6 @@ function SwimCoach() {
             React.createElement("div", { id: "calendario", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Calendario de entrenamiento — últimas 26 semanas"),
                 React.createElement(TrainingHeatmap, { sessions: sessions })),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "registro", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "flex items-center justify-between mb-3" },
                     React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4]" }, "Sesiones registradas"),
@@ -1121,15 +1117,14 @@ function SwimCoach() {
                     return React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 mb-4" }, React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "Propuesta de entrenamiento — al sincronizar con Strava, se sustituye sola por los datos reales del día."), typeToggle, dateInput, descInput, aguaSection, saveBtn);
                 })(),
                 React.createElement(SessionAccordion, { sessions: sessions, paceTargets: paceTargets, onDelete: deleteSession })),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "natacion", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 mb-1" },
                     React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4]" }, "Natación"),
                     React.createElement("button", { onClick: runCalibration, disabled: calibrating, className: "tap-target flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide bg-[#142F42] hover:bg-[#1B3B52] disabled:opacity-50 border border-[#1E3D4F] rounded-full px-4 py-2.5 transition-colors" },
                         React.createElement(Icon.Loader2, { size: 12, className: calibrating ? "animate-spin" : "" }),
                         "actualizar ritmos con Strava")),
-                calibrateMsg && React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mb-3" }, calibrateMsg),
-                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "de más lento a más rápido · ritmo por 100m"),
+                calibrateMsg && React.createElement("div", { className: "text-[10px] font-mono text-[#7FA9AA] mb-3" }, calibrateMsg),
+                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "de más lento a más rápido · ritmo por 100m"),
                 React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, NOTATION_HELP.map((zone) => {
                     const range = paceTargets[zone] || DEFAULT_PACE_TARGETS[zone];
                     return React.createElement("div", { key: zone, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg px-3 py-2" },
@@ -1146,9 +1141,26 @@ function SwimCoach() {
                     " · ",
                     z.label))))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
+            React.createElement("div", { id: "chat", className: "my-8 scroll-mt-20" },
+                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Entrenador"),
+                React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl flex flex-col h-[420px]" },
+                    React.createElement("div", { className: "flex-1 overflow-y-auto p-4 space-y-3" },
+                        messages.map((m, i) => (React.createElement("div", { key: i, className: `flex ${m.role === "user" ? "justify-end" : "justify-start"}` },
+                            React.createElement("div", { className: `max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user"
+                                    ? "bg-[#FF6B35] text-[#0B1F2E] font-medium rounded-br-sm"
+                                    : "bg-[#142F42] text-[#EAF2F2] rounded-bl-sm border border-[#1E3D4F]"}` }, m.text)))),
+                        sending && (React.createElement("div", { className: "flex justify-start" },
+                            React.createElement("div", { className: "bg-[#142F42] border border-[#1E3D4F] rounded-2xl rounded-bl-sm px-4 py-2.5" },
+                                React.createElement(Icon.Loader2, { size: 14, className: "animate-spin text-[#7FA9AA]" })))),
+                        React.createElement("div", { ref: chatEndRef })),
+                    React.createElement("div", { className: "border-t border-[#1E3D4F] p-3 flex gap-2 safe-bottom" },
+                        React.createElement("input", { value: input, onChange: (e) => setInput(e.target.value), onFocus: (e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300), onKeyDown: (e) => e.key === "Enter" && send(), placeholder: "Pregunta o pide una sesión...", style: { fontSize: 16 }, className: "flex-1 bg-[#0B1F2E] border border-[#1E3D4F] rounded-full px-4 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C]" }),
+                        React.createElement("button", { onClick: send, disabled: sending, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] disabled:opacity-50 text-[#0B1F2E] rounded-full flex items-center justify-center shrink-0 transition-colors" },
+                            React.createElement(Icon.Send, { size: 15 }))))),
+            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Semana de Getaria–Zarautz"),
-                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "taper · 3 sesiones de agua + trabajo en seco"),
+                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "taper · 3 sesiones de agua + trabajo en seco"),
                 React.createElement("div", { className: "space-y-2" }, RACE_WEEK_PLAN.map((s, i) => {
                     const done = s.type === "agua" ? sessions.find((sess) => sess.date === s.date) : null;
                     const isPast = s.date < TODAY.toISOString().slice(0, 10);
@@ -1166,19 +1178,17 @@ function SwimCoach() {
                             s.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4] truncate sm:whitespace-normal" }, s.detail)),
                         s.type === "agua" && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${done ? "bg-[#4A8B8C]/20 text-[#7FA9AA]" : isPast ? "bg-[#E8453C]/15 text-[#E8453C]" : "bg-[#1E3D4F] text-[#5A7A87]"}` }, done ? `✓ hecho · ${done.distance}m` : isPast ? "✗ sin registrar" : "pendiente"))));
                 }))),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Alimentación · día de carrera"),
-                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "domingo 19 · salida 11:00h · agua a ~25°C, ola de calor prevista"),
+                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "domingo 19 · salida 11:00h · agua a ~25°C, ola de calor prevista"),
                 React.createElement("div", { className: "space-y-2" }, RACE_DAY_NUTRITION.map((n, i) => (React.createElement("div", { key: i, className: "flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 bg-[#0E2634] border border-[#1E3D4F] rounded-xl px-4 py-3" },
                     React.createElement("span", { className: "font-mono text-[11px] text-[#FF6B35] w-24 shrink-0" }, n.time),
                     React.createElement("div", { className: "min-w-0" },
                         React.createElement("div", { className: "text-sm font-medium" }, n.label),
                         n.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4]" }, n.detail))))))),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "my-8" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Después de Getaria — hacia Salomé Campos"),
-                React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono mb-3" }, "5.000m · 5 de septiembre · bloque de construcción"),
+                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "5.000m · 5 de septiembre · bloque de construcción"),
                 React.createElement("div", { className: "space-y-2" }, BUILD_PLAN.map((b, i) => (React.createElement("div", { key: i, className: `flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 rounded-xl px-4 py-3 border ${b.title.includes("Salomé") ? "bg-[#4A8B8C]/10 border-[#4A8B8C]" : "bg-[#0E2634] border-[#1E3D4F]"}` },
                     React.createElement("span", { className: "font-mono text-[11px] text-[#7FA9AA] w-40 shrink-0" }, b.block),
                     React.createElement("div", { className: "min-w-0" },
