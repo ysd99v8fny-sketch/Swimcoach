@@ -1,11 +1,20 @@
 import { getValidAccessToken, activityToSession, SWIM_TYPES } from "../../lib/strava.js";
 import { upsertSessions } from "../../lib/sessions.js";
+import { requireAuth } from "../../lib/auth.js";
 
 // GET /api/strava/sync
 // Pulls the athlete's full activity history from Strava (paginated),
 // filters to swims, and stores them. Safe to re-run any time — it's an
 // upsert keyed by activity id, so nothing gets duplicated.
+//
+// Requires the x-app-secret header (see lib/auth.js). This means you can no
+// longer trigger a sync by just visiting the URL in a browser tab — use the
+// "Sincronizar" button in the app (it now sends the header automatically),
+// or call it manually with:
+//   curl -H "x-app-secret: <tu secreto>" https://swimcoach-two.vercel.app/api/strava/sync
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
+
   try {
     const token = await getValidAccessToken();
     let page = 1;

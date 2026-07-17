@@ -1,9 +1,17 @@
 import { getSessions, addManualSession, deleteSession } from "../lib/sessions.js";
+import { requireAuth } from "../lib/auth.js";
 
 // GET    /api/sessions        — list all stored sessions (newest first)
 // POST   /api/sessions        — add/update a session manually (e.g. planned workout, dry-land work)
 // DELETE /api/sessions        — remove a session by id (e.g. a fulfilled "planned" proposal)
+//
+// All methods require the x-app-secret header (see lib/auth.js) — this
+// endpoint exposes and can delete your full training history, and the repo
+// it lives in is public, so it must not be reachable by anyone who finds
+// the URL.
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
+
   if (req.method === "GET") {
     const sessions = await getSessions();
     res.status(200).json(sessions);
