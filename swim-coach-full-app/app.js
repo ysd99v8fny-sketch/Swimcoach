@@ -110,23 +110,34 @@ const DEFAULT_PACE_TARGETS = {
 // Splits the distribution of observed swim paces into 7 bands (one per zone),
 // using the 4th/96th percentile as the outer bounds to avoid outliers.
 function calibratePaceTargets(sessions) {
+    // Prefer per-lap paces (lapPaces, populated by the backend from Strava's
+    // laps endpoint — see lib/strava.js getLapPaces) over a session's single
+    // whole-activity average. The average blends warm-up + main set + cool-
+    // down into one number that doesn't represent any real zone — checked
+    // against Anton's actual Strava data: a session that averaged 1:39/100m
+    // had laps ranging from 1:26 (fast reps) to 1:46 (warm-up/cool-down),
+    // which is the spread this calibration actually needs. Sessions synced
+    // before lapPaces existed, or manual entries, fall back to their one
+    // average pace so they still contribute, just less precisely.
     const paces = sessions
         // Exclude "seco" (no pace) and "planned" proposals — a proposal's pace
         // field is synthetic (derived from the *current* zone targets when you
         // saved it), so feeding it back into calibration would just reinforce
         // whatever zones already existed instead of reflecting real swims.
         .filter((s) => s.type !== "seco" && !s.planned)
-        .map((s) => {
-            const sec = paceToSeconds(s.pace);
-            if (!sec)
-                return null;
+        .flatMap((s) => {
             // Normalize to pool-equivalent pace before mixing. Open-water
             // paces run ~10s/100m slower than pool paces for the same effort
             // (wetsuit drag, sighting, no wall push-offs — see
             // POOL_TO_OPENWATER_OFFSET_SEC). These zones are a pool training
             // framework, so blending raw open-water times in unadjusted was
             // dragging every zone slower than your actual pool pace.
-            return s.location === "abiertas" ? sec - POOL_TO_OPENWATER_OFFSET_SEC : sec;
+            const offset = s.location === "abiertas" ? POOL_TO_OPENWATER_OFFSET_SEC : 0;
+            if (Array.isArray(s.lapPaces) && s.lapPaces.length > 0) {
+                return s.lapPaces.map((sec) => sec - offset);
+            }
+            const sec = paceToSeconds(s.pace);
+            return sec ? [sec - offset] : [];
         })
         .filter((v) => v && v > 40 && v < 240)
         .sort((a, b) => a - b);
