@@ -98,17 +98,41 @@ export function activityToSession(a) {
  * (50m fast reps) to 1:46/100m (400m warm-up/cool-down) — that spread is
  * what the zone calibration actually needs.
  */
+// Thrown when Strava responds 429 (rate limit hit) — distinguished from a
+// generic failure so callers can stop the backfill gracefully instead of
+// treating it as "no lap data for this one activity" or aborting everything.
+export class StravaRateLimitError extends Error {}
+
+/** True once usage is close enough to Strava's 15-minute cap that the next
+ * batch of requests risks a 429 — read from the response headers Strava
+ * sends on every call, so this adapts automatically if their limits change. */
+export function isRateLimitClose(res) {
+  const usage = res.headers.get("x-ratelimit-usage");
+  const limit = res.headers.get("x-ratelimit-limit");
+  if (!usage || !limit)
+    return false;
+  const shortUsage = Number(usage.split(",")[0]);
+  const shortLimit = Number(limit.split(",")[0]);
+  return shortLimit > 0 && shortUsage / shortLimit > 0.9;
+}
+
 export async function getLapPaces(activityId, accessToken) {
   const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/laps`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return [];
+  if (res.status === 429) {
+    throw new StravaRateLimitError("Strava rate limit alcanzado");
+  }
+  if (!res.ok)
+    return { paces: [], rateLimitClose: false };
   const laps = await res.json();
-  if (!Array.isArray(laps)) return [];
-  return laps
-    .filter((l) => l.distance >= 25 && l.moving_time > 0)
-    .map((l) => l.moving_time / (l.distance / 100))
-    .filter((sec) => sec > 40 && sec < 240);
+  const paces = Array.isArray(laps)
+    ? laps
+        .filter((l) => l.distance >= 25 && l.moving_time > 0)
+        .map((l) => l.moving_time / (l.distance / 100))
+        .filter((sec) => sec > 40 && sec < 240)
+    : [];
+  return { paces, rateLimitClose: isRateLimitClose(res) };
 }
 
 export const SWIM_TYPES = new Set(["Swim"]);
