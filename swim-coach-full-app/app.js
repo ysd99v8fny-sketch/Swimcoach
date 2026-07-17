@@ -89,8 +89,23 @@ const DEFAULT_PACE_TARGETS = {
 // using the 4th/96th percentile as the outer bounds to avoid outliers.
 function calibratePaceTargets(sessions) {
     const paces = sessions
-        .filter((s) => s.type !== "seco")
-        .map((s) => paceToSeconds(s.pace))
+        // Exclude "seco" (no pace) and "planned" proposals — a proposal's pace
+        // field is synthetic (derived from the *current* zone targets when you
+        // saved it), so feeding it back into calibration would just reinforce
+        // whatever zones already existed instead of reflecting real swims.
+        .filter((s) => s.type !== "seco" && !s.planned)
+        .map((s) => {
+            const sec = paceToSeconds(s.pace);
+            if (!sec)
+                return null;
+            // Normalize to pool-equivalent pace before mixing. Open-water
+            // paces run ~10s/100m slower than pool paces for the same effort
+            // (wetsuit drag, sighting, no wall push-offs — see
+            // POOL_TO_OPENWATER_OFFSET_SEC). These zones are a pool training
+            // framework, so blending raw open-water times in unadjusted was
+            // dragging every zone slower than your actual pool pace.
+            return s.location === "abiertas" ? sec - POOL_TO_OPENWATER_OFFSET_SEC : sec;
+        })
         .filter((v) => v && v > 40 && v < 240)
         .sort((a, b) => a - b);
     if (paces.length < 10)
