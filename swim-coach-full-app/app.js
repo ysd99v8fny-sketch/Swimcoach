@@ -487,8 +487,8 @@ function buildLoadSeries(sessions) {
 // endurance formula: T2 = T1 · (D2/D1)^1.06. Pool paces get a fixed
 // open-water conversion offset since the two aren't directly comparable.
 const POOL_TO_OPENWATER_OFFSET_SEC = 10; // seconds/100m, pool tends to run faster
-function predictRaceTime(sessions, raceDistance) {
-    const cutoff = new Date(TODAY);
+function predictRaceTime(sessions, raceDistance, asOf = TODAY) {
+    const cutoff = new Date(asOf);
     cutoff.setDate(cutoff.getDate() - 180);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
     const candidates = sessions
@@ -520,6 +520,55 @@ function RacePrediction({ sessions, race }) {
             React.createElement("div", { className: "font-display text-3xl text-[#FF6B35]" }, fmtDuration(pred.totalSec))),
         React.createElement("div", { className: "text-[11px] text-[#5A7A87] font-mono max-w-xs" },
             "basado en tu mejor ritmo reciente (", fmtDate(pred.refDate), ", ", pred.refDistance, "m", pred.refWasPool ? ", piscina +conversión" : "", ") · modelo Riegel, orientativo"));
+}
+
+// ---- Race prediction trend (how the estimate has moved over ~26 weeks) ----
+// Re-runs predictRaceTime as of each weekly checkpoint in the past, using
+// only the sessions that existed by that date. Shows whether the estimate
+// is actually improving or just holding steady in place.
+function computePredictionTrend(sessions, raceDistance, weeks = 26) {
+    const points = [];
+    const endStr = getWeekStart(TODAY.toISOString().slice(0, 10));
+    for (let w = weeks - 1; w >= 0; w--) {
+        const checkpoint = new Date(endStr + "T00:00:00");
+        checkpoint.setDate(checkpoint.getDate() - w * 7);
+        const checkpointStr = checkpoint.toISOString().slice(0, 10);
+        const known = sessions.filter((s) => s.date <= checkpointStr);
+        const pred = predictRaceTime(known, raceDistance, checkpoint);
+        if (pred)
+            points.push({ date: checkpointStr, totalSec: pred.totalSec });
+    }
+    return points;
+}
+function PredictionTrend({ sessions, race }) {
+    const points = useMemo(() => computePredictionTrend(sessions, race.distance), [sessions, race.distance]);
+    if (points.length < 3) {
+        return null; // not enough weekly history yet to draw a meaningful trend
+    }
+    const W = 100, H = 32, pad = 3;
+    const secs = points.map((p) => p.totalSec);
+    const fastest = Math.min(...secs);
+    const slowest = Math.max(...secs);
+    const range = slowest - fastest || 1;
+    const xFor = (i) => pad + (i / (points.length - 1 || 1)) * (W - pad * 2);
+    // faster (lower seconds) -> higher on the chart
+    const yFor = (sec) => pad + ((sec - fastest) / range) * (H - pad * 2);
+    const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${xFor(i).toFixed(1)},${yFor(p.totalSec).toFixed(1)}`).join(" ");
+    const first = points[0].totalSec;
+    const last = points[points.length - 1].totalSec;
+    const deltaSec = first - last; // positive = getting faster over the window
+    const improving = deltaSec > 0;
+    return (React.createElement("div", { className: "mt-3 pt-3 border-t border-[#1E3D4F]" },
+        React.createElement("div", { className: "flex items-center justify-between mb-1" },
+            React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "Evolución (26 semanas)"),
+            React.createElement("span", { className: `font-mono text-[10px] ${improving ? "text-[#4A8B8C]" : "text-[#FF6B35]"}` },
+                improving ? "▼ " : "▲ ",
+                fmtDuration(Math.abs(deltaSec)))),
+        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-8", preserveAspectRatio: "none" },
+            React.createElement("path", { d: pathD, fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.3", vectorEffect: "non-scaling-stroke" })),
+        React.createElement("div", { className: "flex justify-between text-[9px] font-mono text-[#5A7A87] mt-1" },
+            React.createElement("span", null, fmtDate(points[0].date)),
+            React.createElement("span", null, fmtDate(points[points.length - 1].date)))));
 }
 
 // ---- Live conditions for the next race (Open-Meteo, free, no key) --------
@@ -1035,7 +1084,8 @@ function SwimCoach() {
             React.createElement(CollapsibleSection, { id: "prediccion", title: "Predicción de tiempo" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" }, RACES.map((race) => React.createElement("div", { key: race.id, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-xl p-4" },
                     React.createElement("div", { className: "font-mono text-[11px] text-[#7FA9AA] mb-2" }, race.name, " · ", race.distance.toLocaleString("es-ES"), "m"),
-                    React.createElement(RacePrediction, { sessions: sessions, race: race }))))),
+                    React.createElement(RacePrediction, { sessions: sessions, race: race }),
+                    React.createElement(PredictionTrend, { sessions: sessions, race: race }))))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "calendario", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Calendario de entrenamiento — últimas 26 semanas"),
