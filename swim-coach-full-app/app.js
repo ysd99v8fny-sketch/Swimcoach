@@ -922,6 +922,10 @@ function SwimCoach() {
     }, [loaded]);
     const nextRace = RACES.find((r) => new Date(r.date) >= TODAY) || RACES[RACES.length - 1];
     const daysLeft = daysBetween(TODAY, nextRace.date);
+    // The other race of the season — shown as a smaller secondary countdown
+    // next to the main one so both objectives stay visible, not just
+    // whichever one happens to be soonest.
+    const otherRace = RACES.find((r) => r.id !== nextRace.id);
     const loadSessions = async () => {
         try {
             const res = await fetch("/api/sessions", { headers: authHeaders() });
@@ -1130,7 +1134,11 @@ function SwimCoach() {
                             nextRace.distance.toLocaleString("es-ES"),
                             "m · fase ",
                             nextRace.phase))),
-                React.createElement("div", { className: "mt-2 text-sm text-[#9FB8C4] max-w-xl" }, "Última semana de puesta a punto. Volumen bajo, intensidad mantenida, prioridad al descanso.")),
+                React.createElement("div", { className: "mt-2 text-sm text-[#9FB8C4] max-w-xl" }, "Última semana de puesta a punto. Volumen bajo, intensidad mantenida, prioridad al descanso."),
+                otherRace && React.createElement("div", { className: "mt-3 flex items-center gap-2 flex-wrap" },
+                    React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "también este año"),
+                    React.createElement("span", { className: "font-mono text-xs text-[#7FA9AA] bg-[#0E2634] border border-[#1E3D4F] rounded-full px-3 py-1" },
+                        daysBetween(TODAY, otherRace.date), " días · ", otherRace.name, " · ", otherRace.distance.toLocaleString("es-ES"), "m"))),
             React.createElement(WaveDivider, null),
             React.createElement("div", { id: "temporada", className: "my-8 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-3" }, "Temporada — sep 25 a oct 26"),
