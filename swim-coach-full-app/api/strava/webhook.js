@@ -37,9 +37,12 @@ export default async function handler(req, res) {
 
       const session = activityToSession(activity);
       // Per-lap paces, not just the whole-session average — see the comment
-      // on getLapPaces for why this matters for calibratePaceTargets.
+      // on getLapPaces for why this matters for calibratePaceTargets. One
+      // activity per webhook call, so rate limiting here is a non-issue —
+      // just fall back to no lap data if anything goes wrong.
       try {
-        session.lapPaces = await getLapPaces(event.object_id, accessToken);
+        const { paces } = await getLapPaces(event.object_id, accessToken);
+        session.lapPaces = paces;
       } catch (e) {
         session.lapPaces = [];
       }
