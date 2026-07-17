@@ -372,21 +372,42 @@ function PaceByPhaseChart({ sessions }) {
     const fastest = Math.min(...monthly.map((m) => m.avgSec));
     const slowest = Math.max(...monthly.map((m) => m.avgSec));
     const range = slowest - fastest || 1;
-    const W = 100, H = 100, padX = 4, padY = 14;
+    const W = 100, H = 100, padX = 6, padY = 22;
     const xFor = (i) => monthly.length === 1 ? W / 2 : padX + (i / (monthly.length - 1)) * (W - padX * 2);
     // faster pace (lower seconds) -> higher on the chart
     const yFor = (sec) => padY + ((sec - fastest) / range) * (H - padY * 2);
-    const points = monthly.map((m, i) => ({ x: xFor(i), y: yFor(m.avgSec), m }));
-    const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    const points = monthly.map((m, i) => ({ xPct: xFor(i), yPct: yFor(m.avgSec), m }));
+    // Dots and value labels are plain HTML positioned with left/top percentages
+    // rather than SVG <circle> elements — the chart stretches to fill its
+    // container (preserveAspectRatio "none"), which would otherwise squash
+    // circles into ellipses. Only the connecting line + area stay as SVG.
+    const lineD = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.xPct.toFixed(1)},${p.yPct.toFixed(1)}`).join(" ");
+    const areaD = `${lineD} L${points[points.length - 1].xPct.toFixed(1)},${H} L${points[0].xPct.toFixed(1)},${H} Z`;
     return (React.createElement("div", { className: "w-full" },
-        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-32", preserveAspectRatio: "none" },
-            React.createElement("path", { d: pathD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.2", vectorEffect: "non-scaling-stroke" }),
-            points.map((p, i) => (React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: "1.8", fill: phaseForDate(p.m.date).color, vectorEffect: "non-scaling-stroke" })))),
-        React.createElement("div", { className: "flex gap-1.5 mt-1" }, monthly.map((m) => (React.createElement("div", { key: m.ym, className: "flex-1 text-center text-[9px] font-mono text-[#7FA9AA] uppercase" },
+        React.createElement("div", { className: "relative w-full h-44" },
+            React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "absolute inset-0 w-full h-full", preserveAspectRatio: "none" },
+                React.createElement("defs", null,
+                    React.createElement("linearGradient", { id: "paceAreaFill", x1: "0", y1: "0", x2: "0", y2: "1" },
+                        React.createElement("stop", { offset: "0%", stopColor: "#4A8B8C", stopOpacity: "0.25" }),
+                        React.createElement("stop", { offset: "100%", stopColor: "#4A8B8C", stopOpacity: "0" }))),
+                React.createElement("path", { d: areaD, fill: "url(#paceAreaFill)", stroke: "none" }),
+                React.createElement("path", { d: lineD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.4", strokeLinecap: "round", strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" })),
+            points.map((p) => {
+                const phase = phaseForDate(p.m.date);
+                return React.createElement("div", { key: p.m.ym, className: "absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1", style: { left: `${p.xPct}%`, top: `${p.yPct}%` } },
+                    React.createElement("span", { className: "text-[9px] font-mono font-medium text-[#EAF2F2] whitespace-nowrap bg-[#0B1F2E]/90 px-1 rounded-sm" }, secondsToPace(Math.round(p.m.avgSec))),
+                    React.createElement("span", { className: "w-2.5 h-2.5 rounded-full border-2 border-[#0B1F2E]", style: { background: phase.color } }));
+            })),
+        React.createElement("div", { className: "flex gap-1.5 mt-2" }, monthly.map((m) => (React.createElement("div", { key: m.ym, className: "flex-1 text-center text-[9px] font-mono text-[#7FA9AA] uppercase" },
             m.ym.slice(5),
             "/",
             m.ym.slice(2, 4))))),
-        React.createElement("div", { className: "text-[10px] font-mono text-[#5A7A87] mt-2" }, `${currentYear} · punto más alto = ritmo más rápido ese mes`)));
+        React.createElement("div", { className: "flex flex-wrap items-center justify-between gap-2 mt-2" },
+            React.createElement("div", { className: "flex items-center gap-3 text-[9px] font-mono text-[#7FA9AA]" },
+                React.createElement("span", { className: "flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full", style: { background: "#3E5A68" } }), "Base"),
+                React.createElement("span", { className: "flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full", style: { background: "#5C8A99" } }), "Progresión"),
+                React.createElement("span", { className: "flex items-center gap-1" }, React.createElement("span", { className: "w-2 h-2 rounded-full", style: { background: "#FF6B35" } }), "Taper")),
+            React.createElement("span", { className: "text-[9px] font-mono text-[#7FA9AA]" }, "más arriba = más rápido"))));
 }
 // ---- Pace sparkline (mini trend vs previous 3 sessions) -------------------
 function Sparkline({ values }) {
