@@ -1,4 +1,4 @@
-import { getValidAccessToken, activityToSession, SWIM_TYPES } from "../../lib/strava.js";
+import { getValidAccessToken, activityToSession, getLapPaces, SWIM_TYPES } from "../../lib/strava.js";
 import { upsertSessions } from "../../lib/sessions.js";
 
 // GET  /api/strava/webhook  — Strava's one-time subscription handshake.
@@ -35,7 +35,16 @@ export default async function handler(req, res) {
       const activity = await detailRes.json();
       if (!SWIM_TYPES.has(activity.type || activity.sport_type)) return;
 
-      await upsertSessions([activityToSession(activity)]);
+      const session = activityToSession(activity);
+      // Per-lap paces, not just the whole-session average — see the comment
+      // on getLapPaces for why this matters for calibratePaceTargets.
+      try {
+        session.lapPaces = await getLapPaces(event.object_id, accessToken);
+      } catch (e) {
+        session.lapPaces = [];
+      }
+
+      await upsertSessions([session]);
     } catch (e) {
       // Already responded 200 to Strava; just log for the Vercel function logs.
       console.error("Webhook processing error:", e);
