@@ -84,4 +84,31 @@ export function activityToSession(a) {
   };
 }
 
+/**
+ * Fetch per-lap splits for an activity and return the pace of each lap that
+ * looks like real swimming (seconds/100m).
+ *
+ * Why this exists: a session's overall average pace (moving_time/distance)
+ * blends warm-up, main set and cool-down into one number that doesn't
+ * represent any single training zone — it's why calibratePaceTargets was
+ * producing zones that didn't match Anton's real paces even after excluding
+ * planned sessions and normalizing open-water pace. Checked against real
+ * data (activity 19306703631, "Natación a la hora del almuerzo"): the
+ * session averaged 1:39/100m, but its 16 laps actually ranged from 1:26/100m
+ * (50m fast reps) to 1:46/100m (400m warm-up/cool-down) — that spread is
+ * what the zone calibration actually needs.
+ */
+export async function getLapPaces(activityId, accessToken) {
+  const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/laps`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return [];
+  const laps = await res.json();
+  if (!Array.isArray(laps)) return [];
+  return laps
+    .filter((l) => l.distance >= 25 && l.moving_time > 0)
+    .map((l) => l.moving_time / (l.distance / 100))
+    .filter((sec) => sec > 40 && sec < 240);
+}
+
 export const SWIM_TYPES = new Set(["Swim"]);
