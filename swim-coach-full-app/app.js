@@ -58,7 +58,11 @@ const Icon = {
     ArrowUp: svgIcon(React.createElement("path", { d: "M12 19V5M5 12l7-7 7 7" })),
 };
 // ---- Fixed reference data -----------------------------------------------
-const TODAY = new Date("2026-07-14T09:00:00");
+// `let`, not `const` — SwimCoach refreshes this on a timer (see the
+// "TODAY ticker" effect) so the countdown and every date-based chart move
+// forward on their own instead of freezing at whatever date the page
+// happened to load on.
+let TODAY = new Date();
 const RACES = [
     { id: "gz", name: "Getaria–Zarautz", date: "2026-07-19", distance: 2850, phase: "Tapering" },
     { id: "sc", name: "Salomé Campos", date: "2026-09-05", distance: 5000, phase: "Build" },
@@ -884,6 +888,20 @@ function SwimCoach() {
         const onScroll = () => setShowBackToTop(window.scrollY > 500);
         window.addEventListener("scroll", onScroll, { passive: true });
         return () => window.removeEventListener("scroll", onScroll);
+    }, []);
+    // ---- TODAY ticker — reassigns the module-level TODAY to the real
+    // current time and forces a re-render, so the countdown, race-week plan
+    // and every chart that reads TODAY roll forward on their own if the app
+    // is left open across midnight, instead of staying stuck at whatever
+    // moment the page first loaded. Checks every minute; cheap, and catches
+    // the day change promptly without needing a manual reload. -----------
+    const [, tick] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => {
+            TODAY = new Date();
+            tick((t) => t + 1);
+        }, 60000);
+        return () => clearInterval(id);
     }, []);
     // ---- Scroll-spy for the section nav — highlights whichever section is
     // currently in view instead of a static list of links. ----------------
