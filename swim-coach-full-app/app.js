@@ -76,13 +76,19 @@ const NOTATION_HELP = ["Cal", "AeL1", "AeL2", "AeL3", "AeM", "AnL", "Vo2Max"];
 // that ran meaningfully faster/slower than intended, and shown in the Natación panel.
 // These are sensible defaults until calibrated against real Strava paces.
 const DEFAULT_PACE_TARGETS = {
-    Cal: [108, 120],
-    AeL1: [102, 108],
-    AeL2: [98, 102],
-    AeL3: [94, 98],
-    AeM: [90, 94],
-    AnL: [82, 90],
-    Vo2Max: [70, 82],
+    // Marcas reales de Anton (aprox. Cal 1:50, AeL1 1:40, AeL2 1:35, AeL3
+    // 1:32, AeM 1:30, AnL 1:28, Vo2Max 1:20). Cada rango es el punto medio
+    // con la zona adyacente, no una medición directa — pulsa "actualizar
+    // ritmos con Strava" en cuanto tengas 10+ sesiones de piscina reales
+    // para que se recalculen a partir de tus datos en vez de este punto de
+    // partida.
+    Cal: [105, 120],
+    AeL1: [98, 105],
+    AeL2: [94, 98],
+    AeL3: [91, 94],
+    AeM: [89, 91],
+    AnL: [84, 89],
+    Vo2Max: [70, 84],
 };
 // ---- Calibrate pace zones from real Strava history -------------------------
 // Splits the distribution of observed swim paces into 7 bands (one per zone),
