@@ -71,18 +71,34 @@ const SEASON_END = "2026-10-05";
 // Zonas de ritmo, de más lenta a más rápida. Nota: interpreto la "AeL" repetida
 // entre AeM y Vo2Max como "AnL" (anaeróbico láctico) — el nombre estándar de esa
 // zona en esta progresión; dímelo si querías otra cosa.
-const NOTATION_HELP = ["Cal", "AeL1", "AeL2", "AeL3", "AeM", "AnL", "Vo2Max"];
+// "Cal" (calentamiento) lived here too, but a warm-up doesn't have a single
+// target pace either — same reasoning as the set-shape categories below —
+// so it moved out, next to them.
+const NOTATION_HELP = ["AeL1", "AeL2", "AeL3", "AeM", "AnL", "Vo2Max"];
+// Extra set-shape categories, only selectable in the "proponer sesión" form —
+// these describe how a set is swum (warm-up, cool-down, or a build
+// within/across reps) rather than a single target pace, so they're kept out
+// of NOTATION_HELP (which drives the calibrated pace-zone grid, deviation
+// flags and calibratePaceTargets — none of which have a single number to
+// compare this kind of set against).
+const RITMO_FORM_OPTIONS = ["Cal", ...NOTATION_HELP, "Calm", "ProgD", "Prog"];
+// Rough pace estimate for those set-shape categories, used only to estimate
+// the summary pace of a proposal — never for calibration or deviation checks.
+const STRUCTURAL_PACE_ESTIMATE = {
+    Cal: [105, 120], // calentamiento — easy pace, no fixed target
+    Calm: [105, 120], // vuelta a la calma — same, easy pace
+    ProgD: [88, 98], // progresivo dentro de la serie — starts ~AeL2/3, ends ~AnL
+    Prog: [86, 96], // progresivo cada serie — same spread, across reps instead of within one
+};
 // Target pace range per 100m (seconds), slowest -> fastest. Used to flag sessions
 // that ran meaningfully faster/slower than intended, and shown in the Natación panel.
 // These are sensible defaults until calibrated against real Strava paces.
 const DEFAULT_PACE_TARGETS = {
-    // Marcas reales de Anton (aprox. Cal 1:50, AeL1 1:40, AeL2 1:35, AeL3
-    // 1:32, AeM 1:30, AnL 1:28, Vo2Max 1:20). Cada rango es el punto medio
-    // con la zona adyacente, no una medición directa — pulsa "actualizar
-    // ritmos con Strava" en cuanto tengas 10+ sesiones de piscina reales
-    // para que se recalculen a partir de tus datos en vez de este punto de
-    // partida.
-    Cal: [105, 120],
+    // Marcas reales de Anton (aprox. AeL1 1:40, AeL2 1:35, AeL3 1:32, AeM
+    // 1:30, AnL 1:28, Vo2Max 1:20). Cada rango es el punto medio con la zona
+    // adyacente, no una medición directa — pulsa "actualizar ritmos con
+    // Strava" en cuanto tengas 10+ sesiones de piscina reales para que se
+    // recalculen a partir de tus datos en vez de este punto de partida.
     AeL1: [98, 105],
     AeL2: [94, 98],
     AeL3: [91, 94],
@@ -933,7 +949,7 @@ function SwimCoach() {
         }
         setSyncing(false);
     };
-    const emptyBlock = () => ({ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno" });
+    const emptyBlock = () => ({ id: uid(), series: 1, meters: 100, ritmo: "AeM", material: "ninguno", comment: "" });
     const addBlock = () => setForm((f) => ({ ...f, blocks: [...f.blocks, emptyBlock()] }));
     const removeBlock = (id) => setForm((f) => ({ ...f, blocks: f.blocks.length > 1 ? f.blocks.filter((b) => b.id !== id) : f.blocks }));
     const updateBlock = (id, field, value) => setForm((f) => ({ ...f, blocks: f.blocks.map((b) => (b.id === id ? { ...b, [field]: value } : b)) }));
@@ -945,14 +961,14 @@ function SwimCoach() {
         // distance-weighted average pace across all blocks, for the summary pace column
         let weightedSec = 0;
         form.blocks.forEach((b) => {
-            const range = paceTargets[b.ritmo] || DEFAULT_PACE_TARGETS[b.ritmo];
+            const range = paceTargets[b.ritmo] || DEFAULT_PACE_TARGETS[b.ritmo] || STRUCTURAL_PACE_ESTIMATE[b.ritmo];
             if (range)
                 weightedSec += ((range[0] + range[1]) / 2) * blockMeters(b);
         });
         const avgPaceSec = totalMeters > 0 ? weightedSec / totalMeters : 0;
         const zonesUsed = [...new Set(form.blocks.map((b) => b.ritmo))];
         const blockLines = form.blocks
-            .map((b) => `${b.series}x${b.meters}m ${b.ritmo}${b.material !== "ninguno" ? ` (${b.material})` : ""}`)
+            .map((b) => `${b.series}x${b.meters}m ${b.ritmo}${b.material !== "ninguno" ? ` (${b.material})` : ""}${b.comment ? ` — ${b.comment}` : ""}`)
             .join(" · ");
         const newSession = {
             id: uid(),
@@ -1144,12 +1160,13 @@ function SwimCoach() {
                         const header = React.createElement("div", { className: "flex items-center justify-between mb-2" }, React.createElement("span", { className: "font-mono text-[10px] uppercase text-[#5A7A87]" }, "Línea ", i + 1, " · ", blockMeters(b), "m"), form.blocks.length > 1 && React.createElement("button", { onClick: () => removeBlock(b.id), className: "tap-target text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 })));
                         const seriesInput = field("Series", React.createElement("input", { type: "number", min: 1, max: 10, value: b.series, onChange: (e) => updateBlock(b.id, "series", Math.max(1, Math.min(10, Number(e.target.value) || 1))), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }));
                         const metersInput = field("Metros", React.createElement("input", { type: "number", min: 25, max: 5000, step: 25, value: b.meters, onChange: (e) => updateBlock(b.id, "meters", Math.max(25, Math.min(5000, Number(e.target.value) || 25))), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }));
-                        const ritmoOptions = NOTATION_HELP.map((z) => React.createElement("option", { key: z, value: z }, z));
+                        const ritmoOptions = RITMO_FORM_OPTIONS.map((z) => React.createElement("option", { key: z, value: z }, z));
                         const ritmoInput = field("Ritmo", React.createElement("select", { value: b.ritmo, onChange: (e) => updateBlock(b.id, "ritmo", e.target.value), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-[#4A8B8C]" }, ritmoOptions));
                         const materialOptions = ["ninguno", "palas", "aletas", "pullboy"].map((mtl) => React.createElement("option", { key: mtl, value: mtl }, mtl));
                         const materialInput = field("Material", React.createElement("select", { value: b.material, onChange: (e) => updateBlock(b.id, "material", e.target.value), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#4A8B8C]" }, materialOptions));
                         const grid = React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, seriesInput, metersInput, ritmoInput, materialInput);
-                        return React.createElement("div", { key: b.id, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg p-3" }, header, grid);
+                        const commentInput = React.createElement("input", { type: "text", placeholder: "Comentario (opcional)", value: b.comment || "", onChange: (e) => updateBlock(b.id, "comment", e.target.value), style: { fontSize: 16 }, className: "w-full bg-[#142F42] border border-[#1E3D4F] rounded-lg px-3 py-2.5 placeholder-[#5A7A87] focus:outline-none focus:border-[#4A8B8C] mt-2" });
+                        return React.createElement("div", { key: b.id, className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg p-3" }, header, grid, commentInput);
                     });
                     const blocksList = React.createElement("div", { className: "space-y-2" }, blockRows);
                     const addLineBtn = React.createElement("button", { onClick: addBlock, className: "tap-target flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wide text-[#4A8B8C] hover:text-[#7FA9AA] transition-colors mt-2" }, React.createElement(Icon.Plus, { size: 12 }), "añadir línea");
