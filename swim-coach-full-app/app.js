@@ -1254,43 +1254,6 @@ function SwimCoach() {
                         React.createElement("button", { onClick: send, disabled: sending, className: "tap-target bg-[#FF6B35] hover:bg-[#E85A28] disabled:opacity-50 text-[#0B1F2E] rounded-full flex items-center justify-center shrink-0 transition-colors" },
                             React.createElement(Icon.Send, { size: 15 }))))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
-            React.createElement("div", { className: "my-8" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Semana de Getaria–Zarautz"),
-                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "taper · 3 sesiones de agua + trabajo en seco"),
-                React.createElement("div", { className: "space-y-2" }, RACE_WEEK_PLAN.map((s, i) => {
-                    const done = s.type === "agua" ? sessions.find((sess) => sess.date === s.date) : null;
-                    const isPast = s.date < TODAY.toISOString().slice(0, 10);
-                    return (React.createElement("div", { key: i, className: `flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 rounded-xl px-4 py-3 border ${s.type === "race"
-                            ? "bg-[#FF6B35]/10 border-[#FF6B35]"
-                            : "bg-[#0E2634] border-[#1E3D4F]"}` },
-                        React.createElement("span", { className: "font-mono text-[11px] uppercase tracking-wide text-[#7FA9AA] w-24 shrink-0" }, s.day),
-                        React.createElement("span", { className: `font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 w-14 text-center shrink-0 ${s.type === "agua"
-                                ? "bg-[#4A8B8C]/20 text-[#7FA9AA]"
-                                : s.type === "race"
-                                    ? "bg-[#FF6B35] text-[#0B1F2E] font-semibold"
-                                    : "bg-[#1E3D4F] text-[#9FB8C4]"}` }, s.type === "agua" ? "agua" : s.type === "race" ? "carrera" : "seco"),
-                        React.createElement("div", { className: "min-w-0 flex-1" },
-                            React.createElement("div", { className: "text-sm font-medium" }, s.title),
-                            s.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4] truncate sm:whitespace-normal" }, s.detail)),
-                        s.type === "agua" && (React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${done ? "bg-[#4A8B8C]/20 text-[#7FA9AA]" : isPast ? "bg-[#E8453C]/15 text-[#E8453C]" : "bg-[#1E3D4F] text-[#5A7A87]"}` }, done ? `✓ hecho · ${done.distance}m` : isPast ? "✗ sin registrar" : "pendiente"))));
-                }))),
-            React.createElement("div", { className: "my-8" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Alimentación · día de carrera"),
-                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "domingo 19 · salida 11:00h · agua a ~25°C, ola de calor prevista"),
-                React.createElement("div", { className: "space-y-2" }, RACE_DAY_NUTRITION.map((n, i) => (React.createElement("div", { key: i, className: "flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 bg-[#0E2634] border border-[#1E3D4F] rounded-xl px-4 py-3" },
-                    React.createElement("span", { className: "font-mono text-[11px] text-[#FF6B35] w-24 shrink-0" }, n.time),
-                    React.createElement("div", { className: "min-w-0" },
-                        React.createElement("div", { className: "text-sm font-medium" }, n.label),
-                        n.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4]" }, n.detail))))))),
-            React.createElement("div", { className: "my-8" },
-                React.createElement("div", { className: "font-display uppercase text-sm tracking-wider text-[#9FB8C4] mb-1" }, "Después de Getaria — hacia Salomé Campos"),
-                React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "5.000m · 5 de septiembre · bloque de construcción"),
-                React.createElement("div", { className: "space-y-2" }, BUILD_PLAN.map((b, i) => (React.createElement("div", { key: i, className: `flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 rounded-xl px-4 py-3 border ${b.title.includes("Salomé") ? "bg-[#4A8B8C]/10 border-[#4A8B8C]" : "bg-[#0E2634] border-[#1E3D4F]"}` },
-                    React.createElement("span", { className: "font-mono text-[11px] text-[#7FA9AA] w-40 shrink-0" }, b.block),
-                    React.createElement("div", { className: "min-w-0" },
-                        React.createElement("div", { className: "text-sm font-medium" }, b.title),
-                        b.detail && React.createElement("div", { className: "text-[11px] text-[#9FB8C4]" }, b.detail))))))),
-            React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { className: "text-center text-[10px] font-mono text-[#3E5A68] pt-4 pb-2 uppercase tracking-widest" }, "Getaria–Zarautz · Salomé Campos · Torrevieja")));
     const backToTopBtn = showBackToTop && React.createElement("button", { onClick: () => window.scrollTo({ top: 0, behavior: "smooth" }), className: "tap-target fixed bottom-6 right-5 z-40 bg-[#FF6B35] hover:bg-[#E85A28] text-[#0B1F2E] rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-colors", style: { bottom: "max(1.5rem, env(safe-area-inset-bottom))" } }, React.createElement(Icon.ArrowUp, { size: 18 }));
     return React.createElement(React.Fragment, null, mainContent, backToTopBtn);
