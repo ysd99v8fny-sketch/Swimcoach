@@ -114,15 +114,16 @@ const DEFAULT_PACE_TARGETS = {
 // Splits the distribution of observed swim paces into 7 bands (one per zone),
 // using the 4th/96th percentile as the outer bounds to avoid outliers.
 function calibratePaceTargets(sessions) {
-    // Prefer per-lap paces (lapPaces, populated by the backend from Strava's
-    // laps endpoint — see lib/strava.js getLapPaces) over a session's single
-    // whole-activity average. The average blends warm-up + main set + cool-
-    // down into one number that doesn't represent any real zone — checked
-    // against Anton's actual Strava data: a session that averaged 1:39/100m
-    // had laps ranging from 1:26 (fast reps) to 1:46 (warm-up/cool-down),
-    // which is the spread this calibration actually needs. Sessions synced
-    // before lapPaces existed, or manual entries, fall back to their one
-    // average pace so they still contribute, just less precisely.
+    // Prefer per-lap data (laps: [{distance, pace}], populated by the backend
+    // from Strava's laps endpoint — see lib/strava.js getLapPaces) over a
+    // session's single whole-activity average. The average blends warm-up +
+    // main set + cool-down into one number that doesn't represent any real
+    // zone — checked against Anton's actual Strava data: a session that
+    // averaged 1:39/100m had laps ranging from 1:26 (fast reps) to 1:46
+    // (warm-up/cool-down), which is the spread this calibration actually
+    // needs. Sessions synced before laps existed, or manual entries, fall
+    // back to their one average pace so they still contribute, just less
+    // precisely.
     const paces = sessions
         // Exclude "seco" (no pace) and "planned" proposals — a proposal's pace
         // field is synthetic (derived from the *current* zone targets when you
@@ -137,8 +138,8 @@ function calibratePaceTargets(sessions) {
             // framework, so blending raw open-water times in unadjusted was
             // dragging every zone slower than your actual pool pace.
             const offset = s.location === "abiertas" ? POOL_TO_OPENWATER_OFFSET_SEC : 0;
-            if (Array.isArray(s.lapPaces) && s.lapPaces.length > 0) {
-                return s.lapPaces.map((sec) => sec - offset);
+            if (Array.isArray(s.laps) && s.laps.length > 0) {
+                return s.laps.map((lap) => lap.pace - offset);
             }
             const sec = paceToSeconds(s.pace);
             return sec ? [sec - offset] : [];
@@ -496,7 +497,14 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const deviationEl = deviation && React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "⚠ ", deviation, ` (obj. ${target[0]}-${target[1]}s)`);
     const notesEl = s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes);
     const deleteBtn = isPlanned && onDelete && React.createElement("button", { onClick: () => onDelete(s.id), title: "Borrar propuesta", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 }));
-    return React.createElement("div", { className: `flex items-center gap-4 rounded-xl px-4 py-3 text-sm flex-wrap border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
+    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
+    // Short automatic note from the coach, attached when this session was
+    // first synced from Strava (see lib/coachComment.js) — never regenerated
+    // on later re-syncs, so it's a snapshot from the day it landed.
+    const coachCommentEl = s.coachComment && React.createElement("div", { className: "flex items-start gap-1.5 mt-2 pt-2 border-t border-[#1E3D4F]" },
+        React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wider text-[#7FA9AA] shrink-0 mt-0.5" }, "Entrenador"),
+        React.createElement("span", { className: "text-[12px] text-[#9FB8C4] italic" }, s.coachComment));
+    return React.createElement("div", { className: `rounded-xl px-4 py-3 border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, mainRow, coachCommentEl);
 }
 // ---- Collapsible session log, grouped by year then month ------------------
 function SessionAccordion({ sessions, paceTargets, onDelete }) {
@@ -540,17 +548,94 @@ function SessionAccordion({ sessions, paceTargets, onDelete }) {
     }));
 }
 
-// Simplified fitness/fatigue/form model (Coggan PMC-style), using distance
-// as a load proxy since we don't have a power/pace-based TSS from Strava
-// for open-water swims. Not medically precise — a personal training aid.
+// ---- Critical Swim Speed (CSS) & real training load (TSS-like) -----------
+// CSS is swim's analog to cycling FTP / running threshold pace: the pace you
+// could sustain indefinitely, used as the 100%-intensity reference for a
+// proper training-load number instead of a raw distance count. The classic
+// protocol swims two dedicated time trials (typically 400m + 100m) and takes
+//   CSS = (400m - 100m) / (T400m - T100m)
+// We don't have dedicated time trials, but real per-lap data (see
+// lib/strava.js getLapPaces) gives the same shape for free: the fastest real
+// lap at a short distance vs. the fastest real lap at a long distance, taken
+// from actual training instead of a lab test.
+// POOL_TO_OPENWATER_OFFSET_SEC is defined further below, alongside the race
+// prediction code that introduced it — referenced here only inside function
+// bodies (estimateCSS, sessionLoad), which run after the whole module has
+// loaded, so the declaration order is not a problem.
+const CSS_SHORT_RANGE = [25, 100]; // "sprint" reference rep length, meters
+const CSS_LONG_RANGE = [250, 1000]; // "sustained" reference rep length, meters
+function estimateCSS(sessions) {
+    const laps = sessions
+        .filter((s) => s.type !== "seco" && !s.planned)
+        .flatMap((s) => {
+            if (!Array.isArray(s.laps) || s.laps.length === 0)
+                return [];
+            const offset = s.location === "abiertas" ? POOL_TO_OPENWATER_OFFSET_SEC : 0;
+            return s.laps.map((l) => ({ distance: l.distance, pace: l.pace - offset }));
+        })
+        .filter((l) => l.pace > 40 && l.pace < 240 && l.distance > 0);
+    if (laps.length < 15)
+        return null; // not enough real lap data yet to trust a CSS estimate
+    const shortLaps = laps.filter((l) => l.distance >= CSS_SHORT_RANGE[0] && l.distance <= CSS_SHORT_RANGE[1]);
+    const longLaps = laps.filter((l) => l.distance >= CSS_LONG_RANGE[0] && l.distance <= CSS_LONG_RANGE[1]);
+    if (shortLaps.length < 3 || longLaps.length < 3)
+        return null; // need a real spread of rep lengths, not just one kind of set
+    // "Best" = fastest real pace at each rep length — the closest available
+    // proxy for a maximal effort at that distance without a dedicated time trial.
+    const bestShort = shortLaps.reduce((a, b) => (b.pace < a.pace ? b : a));
+    const bestLong = longLaps.reduce((a, b) => (b.pace < a.pace ? b : a));
+    const tShort = bestShort.pace * (bestShort.distance / 100); // total seconds
+    const tLong = bestLong.pace * (bestLong.distance / 100);
+    const dDelta = bestLong.distance - bestShort.distance;
+    const tDelta = tLong - tShort;
+    if (dDelta <= 0 || tDelta <= 0)
+        return null; // bad/inconsistent data — the "long" rep wasn't actually slower overall
+    const cssPace = tDelta / (dDelta / 100); // seconds/100m
+    if (cssPace < 40 || cssPace > 240)
+        return null; // sanity check
+    return { cssPace, refShort: bestShort, refLong: bestLong };
+}
+// Real per-session training load, rTSS-style: intensity relative to CSS,
+// squared, applied to duration — same shape as TrainingPeaks' running/cycling
+// TSS, scaled so ~1 hour exactly at CSS pace ≈ 100 load points.
+//   IF = ritmo CSS / ritmo real   (más rápido que CSS => IF > 1)
+//   carga = duración_seg · IF² / 36
+function sessionLoad(s, cssPace) {
+    const distance = s.distance || 0;
+    if (distance <= 0)
+        return 0;
+    const offset = s.location === "abiertas" ? POOL_TO_OPENWATER_OFFSET_SEC : 0;
+    let avgPace = null;
+    if (Array.isArray(s.laps) && s.laps.length > 0) {
+        const totalSec = s.laps.reduce((sum, l) => sum + l.pace * (l.distance / 100), 0);
+        const totalDist = s.laps.reduce((sum, l) => sum + l.distance, 0);
+        avgPace = totalDist > 0 ? (totalSec / totalDist) * 100 : null;
+    }
+    else {
+        avgPace = paceToSeconds(s.pace);
+    }
+    if (!avgPace)
+        return distance / 50; // no pace data at all — fall back to the old proxy
+    avgPace -= offset;
+    if (avgPace <= 0)
+        return distance / 50;
+    const durationSec = avgPace * (distance / 100);
+    const intensityFactor = cssPace / avgPace;
+    return (durationSec * intensityFactor * intensityFactor) / 36;
+}
+// Daily load series feeding the CTL/ATL/TSB form model below. Uses the real
+// CSS-based load whenever there's enough lap data to estimate CSS; otherwise
+// degrades gracefully to the old arbitrary distance/50 proxy so the form
+// chart never goes empty just because Strava hasn't synced enough laps yet.
 function buildLoadSeries(sessions) {
+    const css = estimateCSS(sessions);
     const byDate = {};
     sessions.forEach((s) => {
         if (s.type === "seco")
             return;
         if (!byDate[s.date])
             byDate[s.date] = 0;
-        byDate[s.date] += (s.distance || 0) / 50; // arbitrary but consistent scaling
+        byDate[s.date] += css ? sessionLoad(s, css.cssPace) : (s.distance || 0) / 50;
     });
     return byDate;
 }
@@ -752,6 +837,7 @@ function formLabel(tsb) {
 }
 function FitnessForm({ sessions }) {
     const series = useMemo(() => computeFitnessForm(sessions), [sessions]);
+    const cssBasis = useMemo(() => estimateCSS(sessions), [sessions]);
     if (!series || series.length === 0) {
         return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos suficientes todavía.");
     }
@@ -787,7 +873,10 @@ function FitnessForm({ sessions }) {
         React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full h-10", preserveAspectRatio: "none" },
             React.createElement("line", { x1: 0, x2: W, y1: zeroY, y2: zeroY, stroke: "#1E3D4F", strokeWidth: "1", vectorEffect: "non-scaling-stroke" }),
             React.createElement("path", { d: lineD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.3", vectorEffect: "non-scaling-stroke" })),
-        React.createElement("div", { className: "text-[10px] font-mono text-[#7FA9AA] mt-1" }, "tendencia últimas 6 semanas · línea por encima = mejor forma")));
+        React.createElement("div", { className: "text-[10px] font-mono text-[#7FA9AA] mt-1" }, "tendencia últimas 6 semanas · línea por encima = mejor forma"),
+        React.createElement("div", { className: "text-[9px] font-mono text-[#5A7A87] mt-2" }, cssBasis
+            ? "carga calculada a partir de tu CSS real (ver apartado Natación)"
+            : "carga estimada por distancia — se afinará con tu CSS real en cuanto haya suficientes sesiones con datos de vueltas de Strava")));
 }
 // ---- Training heatmap (GitHub-style, last 26 weeks) ------------------
 function TrainingHeatmap({ sessions }) {
@@ -1045,6 +1134,7 @@ function SwimCoach() {
             // will reappear on next successful loadSessions() if this failed silently
         }
     };
+    const cssEstimate = useMemo(() => estimateCSS(sessions), [sessions]);
     const recentSummary = useMemo(() => {
         if (sessions.length === 0)
             return "Sin sesiones registradas todavía.";
@@ -1220,6 +1310,7 @@ function SwimCoach() {
                         React.createElement(Icon.Loader2, { size: 12, className: calibrating ? "animate-spin" : "" }),
                         "actualizar ritmos con Strava")),
                 calibrateMsg && React.createElement("div", { className: "text-[10px] font-mono text-[#7FA9AA] mb-3" }, calibrateMsg),
+                cssEstimate && React.createElement("div", { className: "text-[11px] font-mono text-[#7FA9AA] mb-3" }, "CSS estimado (ritmo umbral, de tus datos reales): ", React.createElement("span", { className: "text-[#FF6B35] font-medium" }, secondsToPace(cssEstimate.cssPace)), "/100m — usado para calcular la carga real de entrenamiento en Forma"),
                 React.createElement("div", { className: "text-[11px] text-[#7FA9AA] font-mono mb-3" }, "de más lento a más rápido · ritmo por 100m"),
                 React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, NOTATION_HELP.map((zone) => {
                     const range = paceTargets[zone] || DEFAULT_PACE_TARGETS[zone];
