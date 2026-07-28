@@ -56,6 +56,10 @@ const Icon = {
         React.createElement("path", { d: "M14 15h4a3 3 0 0 0 0-6 5 5 0 0 0-9-2" }))),
     Zap: svgIcon(React.createElement("path", { d: "M13 2 4 14h6l-1 8 9-12h-6l1-8Z" })),
     ArrowUp: svgIcon(React.createElement("path", { d: "M12 19V5M5 12l7-7 7 7" })),
+    Share: svgIcon(React.createElement(React.Fragment, null,
+        React.createElement("path", { d: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" }),
+        React.createElement("polyline", { points: "16 6 12 2 8 6" }),
+        React.createElement("line", { x1: "12", y1: "2", x2: "12", y2: "15" }))),
 };
 // ---- Fixed reference data -----------------------------------------------
 // `let`, not `const` — SwimCoach refreshes this on a timer (see the
@@ -462,6 +466,203 @@ function Sparkline({ values }) {
     return (React.createElement("svg", { width: w, height: h, className: "shrink-0" },
         React.createElement("polyline", { points: pts.join(" "), fill: "none", stroke: improving ? "#4A8B8C" : "#FF6B35", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })));
 }
+// ---- Shareable Instagram Story image (1080x1920) per session --------------
+// Draws a vertical "story" card with the session's key numbers using plain
+// Canvas 2D, in the same visual language as the app (navy background, orange
+// accent, teal secondary, Oswald/Inter/IBM Plex Mono) — no server round-trip,
+// no extra dependency. Triggered per session from the "compartir" button in
+// SessionCard.
+const STORY_W = 1080, STORY_H = 1920;
+function roundRectPath(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+}
+function drawStoryWaves(ctx, baseY) {
+    // Three layered sine-ish bands, echoing the app's WaveDivider motif.
+    const layers = [
+        { color: "#142F42", amp: 26, freq: 0.9, yOff: 40, alpha: 1 },
+        { color: "#1E3D4F", amp: 34, freq: 1.3, yOff: 90, alpha: 0.9 },
+        { color: "#4A8B8C", amp: 18, freq: 1.7, yOff: 130, alpha: 0.35 },
+    ];
+    layers.forEach(({ color, amp, freq, yOff, alpha }) => {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, baseY + yOff);
+        for (let x = 0; x <= STORY_W; x += 20) {
+            const y = baseY + yOff + Math.sin((x / STORY_W) * Math.PI * 2 * freq) * amp;
+            ctx.lineTo(x, y);
+        }
+        ctx.lineTo(STORY_W, STORY_H);
+        ctx.lineTo(0, STORY_H);
+        ctx.closePath();
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+}
+async function ensureStoryFontsLoaded() {
+    try {
+        await Promise.all([
+            document.fonts.load("700 260px Oswald"),
+            document.fonts.load("600 46px Oswald"),
+            document.fonts.load("600 96px Oswald"),
+            document.fonts.load("500 30px 'IBM Plex Mono'"),
+            document.fonts.load("600 44px 'IBM Plex Mono'"),
+            document.fonts.load("italic 400 38px Inter"),
+            document.fonts.load("400 40px Inter"),
+        ]);
+        await document.fonts.ready;
+    }
+    catch (e) {
+        // best effort — canvas falls back to the system font if this fails
+    }
+}
+function wrapText(ctx, text, maxWidth) {
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = "";
+    words.forEach((word) => {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line);
+            line = word;
+        }
+        else {
+            line = test;
+        }
+    });
+    if (line)
+        lines.push(line);
+    return lines;
+}
+async function buildStoryCanvas(session) {
+    await ensureStoryFontsLoaded();
+    const canvas = document.createElement("canvas");
+    canvas.width = STORY_W;
+    canvas.height = STORY_H;
+    const ctx = canvas.getContext("2d");
+    ctx.textBaseline = "alphabetic";
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, 0, STORY_H);
+    bg.addColorStop(0, "#0B1F2E");
+    bg.addColorStop(1, "#0E2634");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, STORY_W, STORY_H);
+    const marginX = 90;
+    // Brand mark + date/location
+    ctx.fillStyle = "#7FA9AA";
+    ctx.font = "500 30px 'IBM Plex Mono'";
+    ctx.fillText("SWIMCOACH · CUADERNO DE ANTON", marginX, 150);
+    const isDry = session.type === "seco";
+    const locationLabel = isDry ? "sesión en seco" : (session.location === "abiertas" ? "aguas abiertas" : "piscina");
+    ctx.fillStyle = "#9FB8C4";
+    ctx.font = "400 40px Inter";
+    ctx.fillText(`${fmtDate(session.date)} · ${locationLabel}`, marginX, 220);
+    let afterY;
+    if (isDry) {
+        // Dry-land session: no distance/pace numbers, just the title/notes.
+        ctx.fillStyle = "#FF6B35";
+        ctx.font = "600 96px Oswald";
+        const title = (session.notes || "Sesión en seco").toUpperCase();
+        const lines = wrapText(ctx, title, STORY_W - marginX * 2).slice(0, 4);
+        lines.forEach((line, i) => ctx.fillText(line, marginX, 420 + i * 110));
+        afterY = 420 + lines.length * 110 + 40;
+    }
+    else {
+        // Big headline number: distance. Font size steps down for longer
+        // digit strings so it never overflows the canvas width.
+        const distStr = (session.distance || 0).toLocaleString("es-ES");
+        const distPx = distStr.length > 5 ? 160 : distStr.length > 4 ? 200 : 260;
+        ctx.fillStyle = "#FF6B35";
+        ctx.font = `700 ${distPx}px Oswald`;
+        ctx.fillText(distStr, marginX, 620);
+        ctx.fillStyle = "#7FA9AA";
+        ctx.font = "500 44px 'IBM Plex Mono'";
+        ctx.fillText("METROS", marginX, 680);
+        // Stat cards row: ritmo / FC / zona (only the ones this session has)
+        const stats = [];
+        if (session.pace)
+            stats.push({ label: "RITMO", value: `${session.pace}/100m` });
+        if (session.hr)
+            stats.push({ label: "FC MEDIA", value: `${session.hr} bpm` });
+        if (session.notation)
+            stats.push({ label: "ZONA", value: session.notation.split(/[\/,]/)[0].trim() });
+        const cardY = 760, cardH = 190, gap = 24;
+        if (stats.length > 0) {
+            const cardW = (STORY_W - marginX * 2 - gap * (stats.length - 1)) / stats.length;
+            stats.forEach((stat, i) => {
+                const x = marginX + i * (cardW + gap);
+                ctx.fillStyle = "#142F42";
+                roundRectPath(ctx, x, cardY, cardW, cardH, 24);
+                ctx.fill();
+                ctx.fillStyle = "#5A7A87";
+                ctx.font = "500 24px 'IBM Plex Mono'";
+                ctx.fillText(stat.label, x + 28, cardY + 56);
+                ctx.fillStyle = "#EAF2F2";
+                ctx.font = "600 46px Oswald";
+                wrapText(ctx, stat.value, cardW - 56).slice(0, 2).forEach((line, li) => ctx.fillText(line, x + 28, cardY + 110 + li * 52));
+            });
+        }
+        afterY = cardY + cardH + 100;
+    }
+    // Coach comment, if this session has one (see lib/coachComment.js)
+    if (session.coachComment) {
+        const boxY = afterY, boxPad = 44, boxH = 320;
+        ctx.fillStyle = "#0E2634";
+        roundRectPath(ctx, marginX, boxY, STORY_W - marginX * 2, boxH, 28);
+        ctx.fill();
+        ctx.fillStyle = "#FF6B35";
+        ctx.fillRect(marginX, boxY, 6, boxH);
+        ctx.fillStyle = "#7FA9AA";
+        ctx.font = "500 24px 'IBM Plex Mono'";
+        ctx.fillText("ENTRENADOR", marginX + boxPad, boxY + 56);
+        ctx.fillStyle = "#C9D8DC";
+        ctx.font = "italic 400 38px Inter";
+        wrapText(ctx, session.coachComment, STORY_W - marginX * 2 - boxPad * 2).slice(0, 5).forEach((line, i) => ctx.fillText(line, marginX + boxPad, boxY + 120 + i * 48));
+    }
+    // Waves + season countdown footer — fixed position regardless of how
+    // much content is above, so the bottom of the card always looks the same.
+    const waveBaseY = STORY_H - 420;
+    drawStoryWaves(ctx, waveBaseY);
+    const nextRace = RACES.find((r) => new Date(r.date) >= TODAY) || RACES[RACES.length - 1];
+    const daysLeft = daysBetween(TODAY, nextRace.date);
+    ctx.fillStyle = "#EAF2F2";
+    ctx.font = "600 44px 'IBM Plex Mono'";
+    ctx.fillText(daysLeft >= 0 ? `${daysLeft} DÍAS PARA ${nextRace.name.toUpperCase()}` : nextRace.name.toUpperCase(), marginX, STORY_H - 120);
+    ctx.fillStyle = "#7FA9AA";
+    ctx.font = "400 32px Inter";
+    ctx.fillText(`${nextRace.distance.toLocaleString("es-ES")}m · ${new Date(nextRace.date).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`, marginX, STORY_H - 70);
+    return canvas;
+}
+// Builds the story image and either opens the native share sheet (mobile,
+// where Instagram shows up as a share target directly) or falls back to
+// downloading the PNG so it can be shared manually.
+async function shareSessionStory(session) {
+    const canvas = await buildStoryCanvas(session);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    if (!blob)
+        throw new Error("No se pudo generar la imagen.");
+    const fileName = `swimcoach-${session.date}.png`;
+    const file = new File([blob], fileName, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "SwimCoach", text: "Mi entrenamiento" });
+        return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
 // ---- Single session row (used by the year/month accordion) ----------------
 function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const zone = hrZone(s.hr);
@@ -497,7 +698,29 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const deviationEl = deviation && React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "⚠ ", deviation, ` (obj. ${target[0]}-${target[1]}s)`);
     const notesEl = s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes);
     const deleteBtn = isPlanned && onDelete && React.createElement("button", { onClick: () => onDelete(s.id), title: "Borrar propuesta", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 }));
-    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn);
+    // Generates a 1080x1920 Instagram Story image for this completed session
+    // (see buildStoryCanvas / shareSessionStory above) and opens the native
+    // share sheet on mobile, or downloads the PNG as a fallback. Only shown
+    // for real (non-planned) sessions — a proposal isn't a workout yet.
+    const [sharing, setSharing] = useState(false);
+    const handleShare = async () => {
+        if (sharing)
+            return;
+        setSharing(true);
+        try {
+            await shareSessionStory(s);
+        }
+        catch (e) {
+            if (e && e.name !== "AbortError") {
+                window.alert("No se pudo generar la imagen. Inténtalo de nuevo.");
+            }
+        }
+        finally {
+            setSharing(false);
+        }
+    };
+    const shareBtn = !isPlanned && React.createElement("button", { onClick: handleShare, disabled: sharing, title: "Compartir como historia de Instagram", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#FF6B35] disabled:opacity-50 transition-colors" }, sharing ? React.createElement(Icon.Loader2, { size: 14, className: "animate-spin" }) : React.createElement(Icon.Share, { size: 14 }));
+    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn, shareBtn);
     // Short automatic note from the coach, attached when this session was
     // first synced from Strava (see lib/coachComment.js) — never regenerated
     // on later re-syncs, so it's a snapshot from the day it landed.
