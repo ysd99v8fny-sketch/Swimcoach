@@ -846,6 +846,42 @@ function sessionLoad(s, cssPace) {
     const intensityFactor = cssPace / avgPace;
     return (durationSec * intensityFactor * intensityFactor) / 36;
 }
+// ---- Personal bests by distance ("mejores marcas") -----------------------
+// Best (fastest) real effort at a handful of common distances, pulled from
+// both whole-session paces (for a straight continuous swim of that exact
+// distance) and individual lap distances (for reps within a structured set)
+// — whichever is faster wins for a given target. Not normalized between
+// pool and open water (see SYSTEM_CONTEXT: the two aren't directly
+// comparable, ~10s/100m apart), so each mark shows where it happened instead
+// of pretending they're on the same scale.
+const PR_DISTANCES = [50, 100, 200, 400, 800, 1000, 1500];
+function computePersonalBests(sessions) {
+    const candidates = [];
+    sessions
+        .filter((s) => s.type !== "seco" && !s.planned)
+        .forEach((s) => {
+        const sessionPace = paceToSeconds(s.pace);
+        if (sessionPace && s.distance) {
+            candidates.push({ distance: s.distance, pace: sessionPace, date: s.date, location: s.location, source: "session" });
+        }
+        if (Array.isArray(s.laps)) {
+            s.laps.forEach((l) => {
+                if (l.pace > 40 && l.pace < 240 && l.distance > 0) {
+                    candidates.push({ distance: l.distance, pace: l.pace, date: s.date, location: s.location, source: "lap" });
+                }
+            });
+        }
+    });
+    const bests = {};
+    PR_DISTANCES.forEach((target) => {
+        // A little slack for GPS/lap-detection rounding (e.g. a 400m rep
+        // logged as 396m) without letting a 100m match bleed into a 200m PR.
+        const tolerance = Math.max(2, target * 0.03);
+        const matches = candidates.filter((c) => Math.abs(c.distance - target) <= tolerance);
+        bests[target] = matches.length > 0 ? matches.reduce((a, b) => (b.pace < a.pace ? b : a)) : null;
+    });
+    return bests;
+}
 // Daily load series feeding the CTL/ATL/TSB form model below. Uses the real
 // CSS-based load whenever there's enough lap data to estimate CSS; otherwise
 // degrades gracefully to the old arbitrary distance/50 proxy so the form
@@ -1368,6 +1404,7 @@ function SwimCoach() {
         }
     };
     const cssEstimate = useMemo(() => estimateCSS(sessions), [sessions]);
+    const personalBests = useMemo(() => computePersonalBests(sessions), [sessions]);
     const recentSummary = useMemo(() => {
         if (sessions.length === 0)
             return "Sin sesiones registradas todavía.";
@@ -1550,6 +1587,18 @@ function SwimCoach() {
                     return React.createElement("div", { key: zone, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg px-3 py-2" },
                         React.createElement("div", { className: "font-mono text-[#FF6B35] text-sm font-medium" }, zone),
                         range && React.createElement("div", { className: "text-[11px] text-[#9FB8C4] font-mono" }, secondsToPace(range[0]), "–", secondsToPace(range[1])));
+                })),
+                React.createElement("div", { className: "font-display uppercase text-xs tracking-wider text-[#9FB8C4] mt-5 mb-2" }, "Mejores marcas"),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2" }, PR_DISTANCES.map((dist) => {
+                    const pr = personalBests[dist];
+                    return React.createElement("div", { key: dist, className: "bg-[#0E2634] border border-[#1E3D4F] rounded-lg px-3 py-2" },
+                        React.createElement("div", { className: "font-mono text-[#5A7A87] text-[10px] uppercase" }, dist, "m"),
+                        pr
+                            ? React.createElement(React.Fragment, null,
+                                React.createElement("div", { className: "font-display text-[#FF6B35] text-lg leading-tight" }, fmtDuration(pr.pace * (dist / 100))),
+                                React.createElement("div", { className: "text-[10px] text-[#7FA9AA] font-mono" }, secondsToPace(pr.pace), "/100m · ", pr.location === "abiertas" ? "aguas abiertas" : "piscina"),
+                                React.createElement("div", { className: "text-[9px] text-[#5A7A87] font-mono" }, fmtDate(pr.date)))
+                            : React.createElement("div", { className: "text-[13px] text-[#5A7A87] font-mono" }, "—"));
                 })),
                 React.createElement("div", { className: "font-display uppercase text-xs tracking-wider text-[#9FB8C4] mt-5 mb-2" },
                     "Zonas de FC (estimadas, máx. ",
