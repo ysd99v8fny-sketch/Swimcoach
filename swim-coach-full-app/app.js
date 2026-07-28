@@ -1271,6 +1271,16 @@ function SwimCoach() {
     };
     useEffect(() => {
         loadSessions();
+        // Auto-sync with Strava right after opening, so the race prediction
+        // and everything else derived from sessions reflects your latest
+        // swim without having to tap "sincronizar" first. Fire-and-forget:
+        // loadSessions() above already shows whatever's already stored
+        // immediately, this just tops it up a moment later in the
+        // background. It's the exact same incremental sync as the button —
+        // if there's nothing new since the last sync (or since the webhook
+        // last fired), it finishes in about a second and changes nothing.
+        runSync();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
