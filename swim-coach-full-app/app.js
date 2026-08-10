@@ -1158,54 +1158,77 @@ function FitnessForm({ sessions }) {
             : "carga estimada por distancia — se afinará con tu CSS real en cuanto haya suficientes sesiones con datos de vueltas de Strava")));
 }
 // ---- Training heatmap (GitHub-style, last 26 weeks) ------------------
-function TrainingHeatmap({ sessions }) {
-    const scrollRef = useRef(null);
-    useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-        }
-    }, [sessions]);
-    const byDate = useMemo(() => {
-        const map = {};
+function MonthlyMetersLineChart({ sessions }) {
+    const monthly = useMemo(() => {
+        const groups = {};
         sessions.forEach((s) => {
             if (s.type === "seco")
                 return;
-            map[s.date] = (map[s.date] || 0) + (s.distance || 0);
+            if (s.date < "2024-01-01")
+                return;
+            const ym = s.date.slice(0, 7);
+            groups[ym] = (groups[ym] || 0) + (s.distance || 0);
         });
-        return map;
-    }, [sessions]);
-    const weeks = 26;
-    const end = getWeekStart(TODAY.toISOString().slice(0, 10));
-    const endDate = new Date(end + "T00:00:00");
-    endDate.setDate(endDate.getDate() + 6);
-    const start = new Date(endDate);
-    start.setDate(start.getDate() - weeks * 7 + 1);
-    const columns = [];
-    for (let w = 0; w < weeks; w++) {
-        const days = [];
-        for (let d = 0; d < 7; d++) {
-            const dt = new Date(start);
-            dt.setDate(dt.getDate() + w * 7 + d);
-            const ds = dt.toISOString().slice(0, 10);
-            days.push({ date: ds, meters: byDate[ds] || 0 });
+        const result = [];
+        const cursor = new Date(2024, 0, 1);
+        const end = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+        while (cursor <= end) {
+            const ym = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+            result.push({
+                ym,
+                meters: groups[ym] || 0,
+                label: cursor.toLocaleDateString("es-ES", { month: "short", year: "2-digit" }),
+                isJan: cursor.getMonth() === 0,
+            });
+            cursor.setMonth(cursor.getMonth() + 1);
         }
-        columns.push(days);
+        return result;
+    }, [sessions]);
+    const hasData = monthly.some((m) => m.meters > 0);
+    if (!hasData) {
+        return React.createElement("div", { className: "text-sm text-[#5A7A87] font-mono" }, "Sin datos de volumen todavía.");
     }
-    const bucket = (m) => {
-        if (m === 0)
-            return "#142F42";
-        if (m < 1500)
-            return "#1E3D4F";
-        if (m < 2500)
-            return "#2E6470";
-        if (m < 3500)
-            return "#4A8B8C";
-        return "#7FA9AA";
-    };
-    const grid = React.createElement("div", { className: "flex gap-[3px] w-max" }, columns.map((week, wi) => React.createElement("div", { key: wi, className: "flex flex-col gap-[3px]" }, week.map((day) => React.createElement("div", { key: day.date, className: "w-[11px] h-[11px] rounded-sm", style: { background: bucket(day.meters) }, title: `${day.date}: ${day.meters ? day.meters + "m" : "descanso"}` })))));
-    const scrollBox = React.createElement("div", { ref: scrollRef, className: "w-full overflow-x-auto scroll-fade" }, grid);
-    const legend = React.createElement("div", { className: "flex items-center justify-between mt-2" }, React.createElement("span", { className: "text-[9px] font-mono text-[#7FA9AA] sm:hidden" }, "← desliza para ver el historial"), React.createElement("div", { className: "flex items-center gap-1.5 text-[9px] font-mono text-[#7FA9AA]" }, React.createElement("span", null, "menos"), ["#142F42", "#1E3D4F", "#2E6470", "#4A8B8C", "#7FA9AA"].map((c) => React.createElement("span", { key: c, className: "w-[10px] h-[10px] rounded-sm", style: { background: c } })), React.createElement("span", null, "más")));
-    return React.createElement("div", { className: "w-full" }, scrollBox, legend);
+    const max = Math.max(...monthly.map((m) => m.meters), 1);
+    const currentYm = `${TODAY.getFullYear()}-${String(TODAY.getMonth() + 1).padStart(2, "0")}`;
+    const W = 100, H = 100, padX = 2, padTop = 8, padBottom = 20;
+    const xFor = (i) => monthly.length === 1 ? W / 2 : padX + (i / (monthly.length - 1)) * (W - padX * 2);
+    const yFor = (m) => padTop + (1 - m / max) * (H - padTop - padBottom);
+    const points = monthly.map((m, i) => ({ xPct: xFor(i), yPct: yFor(m.meters), m }));
+    const lineD = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.xPct.toFixed(1)},${p.yPct.toFixed(1)}`).join(" ");
+    const areaD = `${lineD} L${points[points.length - 1].xPct.toFixed(1)},${H} L${points[0].xPct.toFixed(1)},${H} Z`;
+    const yearDividers = monthly.map((m, i) => m.isJan && i > 0
+        ? React.createElement("div", { key: `yr-${m.ym}`, className: "absolute top-0 bottom-0 border-l border-dashed border-[#1E3D4F]", style: { left: `${xFor(i)}%` } })
+        : null);
+    return (React.createElement("div", { className: "w-full" },
+        React.createElement("div", { className: "relative w-full h-40" },
+            yearDividers,
+            React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "absolute inset-0 w-full h-full", preserveAspectRatio: "none" },
+                React.createElement("defs", null,
+                    React.createElement("linearGradient", { id: "metersAreaFill", x1: "0", y1: "0", x2: "0", y2: "1" },
+                        React.createElement("stop", { offset: "0%", stopColor: "#4A8B8C", stopOpacity: "0.3" }),
+                        React.createElement("stop", { offset: "100%", stopColor: "#4A8B8C", stopOpacity: "0" }))),
+                React.createElement("path", { d: areaD, fill: "url(#metersAreaFill)", stroke: "none" }),
+                React.createElement("path", { d: lineD, fill: "none", stroke: "#4A8B8C", strokeWidth: "1.2", strokeLinecap: "round", strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" })),
+            points.map((p) => {
+                const isCurrent = p.m.ym === currentYm;
+                return React.createElement("div", {
+                    key: p.m.ym,
+                    className: "absolute -translate-x-1/2 -translate-y-1/2",
+                    style: { left: `${p.xPct}%`, top: `${p.yPct}%` },
+                    title: `${p.m.label}: ${p.m.meters.toLocaleString("es-ES")}m${isCurrent ? " (mes en curso)" : ""}`,
+                }, React.createElement("span", {
+                    className: "block rounded-full border-2 border-[#0B1F2E]",
+                    style: {
+                        width: isCurrent ? "9px" : "6px",
+                        height: isCurrent ? "9px" : "6px",
+                        background: isCurrent ? "#FF6B35" : "#4A8B8C",
+                    },
+                }));
+            })),
+        React.createElement("div", { className: "flex mt-2" }, monthly.map((m) => React.createElement("div", { key: m.ym, className: "flex-1 text-center text-[9px] font-mono text-[#7FA9AA] uppercase" }, (m.isJan || m.ym === currentYm) ? m.label : ""))),
+        React.createElement("div", { className: "flex items-center justify-between mt-2 text-[9px] font-mono text-[#5A7A87]" },
+            React.createElement("span", null, "metros totales por mes, desde enero 2024"),
+            React.createElement("span", null, "punto naranja = mes en curso (parcial)"))));
 }
 // ---- Main app ---------------------------------------------------------
 function SwimCoach() {
@@ -1500,7 +1523,7 @@ function SwimCoach() {
                 ["#temporada", "Temporada", "temporada"],
                 ["#condiciones", "Condiciones", "condiciones"],
                 ["#prediccion", "Predicción", "prediccion"],
-                ["#calendario", "Calendario", "calendario"],
+                ["#calendario", "Volumen", "calendario"],
                 ["#registro", "Registro", "registro"],
                 ["#natacion", "Natación", "natacion"],
                 ["#chat", "Entrenador", "chat"],
@@ -1564,8 +1587,8 @@ function SwimCoach() {
                     React.createElement(PredictionTrend, { sessions: sessions, race: race }))))),
             React.createElement(WaveDivider, { color: "#1E3D4F", opacity: 1 }),
             React.createElement("div", { id: "calendario", className: "my-12 scroll-mt-20" },
-                React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2] mb-3" }, "Calendario de entrenamiento — últimas 26 semanas"),
-                React.createElement(TrainingHeatmap, { sessions: sessions })),
+                React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2] mb-3" }, "Metros totales por mes — desde 2024"),
+                React.createElement(MonthlyMetersLineChart, { sessions: sessions })),
             React.createElement("div", { id: "registro", className: "my-12 scroll-mt-20" },
                 React.createElement("div", { className: "flex items-center justify-between mb-3" },
                     React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2]" }, "Sesiones registradas"),
