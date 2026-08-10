@@ -1,4 +1,4 @@
-import { getValidAccessToken, activityToSession, getLapPaces, StravaRateLimitError, isRateLimitClose, SWIM_TYPES } from "../../lib/strava.js";
+import { getValidAccessToken, activityToSession, getLapData, StravaRateLimitError, isRateLimitClose, SWIM_TYPES } from "../../lib/strava.js";
 import { getSessions, upsertSessions } from "../../lib/sessions.js";
 import { requireAuth } from "../../lib/auth.js";
 
@@ -35,10 +35,12 @@ async function mapWithConcurrency(items, limit, fn) {
 // upsert keyed by activity id, so nothing gets duplicated.
 //
 // For each swim it also fetches per-lap splits and stores them as `laps`
-// ({ distance, pace } per lap) — see lib/strava.js getLapPaces for why this
-// matters more than the whole-session average pace. That's one extra
-// Strava call per swim, which on a big history can hit Strava's 15-minute
-// rate limit in a single run. This is handled by:
+// ({ distance, pace } per lap, feeds pace calibration/CSS/PRs) and `series`
+// (reps grouped into sets with real rest time between them, e.g. "8x100m,
+// descanso 15s" — feeds the splits/rest breakdown shown per session) — see
+// lib/strava.js getLapData. That's one extra Strava call per swim, which on
+// a big history can hit Strava's 15-minute rate limit in a single run. This
+// is handled by:
 //   - Skipping the lap fetch for any swim that already has laps stored
 //     from a previous sync, so re-running only costs requests for genuinely
 //     new activities.
@@ -99,11 +101,13 @@ export default async function handler(req, res) {
           // Already have laps for this one — keep them, don't spend a request.
           const prior = existing.find((s) => s.id === session.id);
           session.laps = prior?.laps || [];
+          session.series = prior?.series || [];
           return session;
         }
         try {
-          const { laps, rateLimitClose } = await getLapPaces(a.id, token);
+          const { laps, series, rateLimitClose } = await getLapData(a.id, token);
           session.laps = laps;
+          session.series = series;
           lapsFetched += 1;
           if (rateLimitClose) {
             rateLimited = true;
@@ -116,6 +120,7 @@ export default async function handler(req, res) {
             return null; // drop this one, retry on the next run
           }
           session.laps = [];
+          session.series = [];
         }
         return session;
       });

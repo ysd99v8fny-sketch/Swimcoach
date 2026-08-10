@@ -1,4 +1,4 @@
-import { getValidAccessToken, activityToSession, getLapPaces, SWIM_TYPES } from "../../lib/strava.js";
+import { getValidAccessToken, activityToSession, getLapData, SWIM_TYPES } from "../../lib/strava.js";
 import { upsertSessions } from "../../lib/sessions.js";
 
 // GET  /api/strava/webhook  — Strava's one-time subscription handshake.
@@ -37,15 +37,19 @@ export default async function handler(req, res) {
 
       const session = activityToSession(activity);
       // Per-lap { distance, pace } pairs, not just the whole-session average —
-      // see the comment on getLapPaces for why this matters for both
-      // calibratePaceTargets and the CSS-based training load. One activity
-      // per webhook call, so rate limiting here is a non-issue — just fall
-      // back to no lap data if anything goes wrong.
+      // see the comment on getLapData for why this matters for both
+      // calibratePaceTargets and the CSS-based training load. Also grabs
+      // `series` (reps grouped into sets with rest time between them) for
+      // the splits/rest breakdown shown per session. One activity per
+      // webhook call, so rate limiting here is a non-issue — just fall back
+      // to no lap data if anything goes wrong.
       try {
-        const { laps } = await getLapPaces(event.object_id, accessToken);
+        const { laps, series } = await getLapData(event.object_id, accessToken);
         session.laps = laps;
+        session.series = series;
       } catch (e) {
         session.laps = [];
+        session.series = [];
       }
 
       await upsertSessions([session]);

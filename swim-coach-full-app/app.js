@@ -119,7 +119,7 @@ const DEFAULT_PACE_TARGETS = {
 // using the 4th/96th percentile as the outer bounds to avoid outliers.
 function calibratePaceTargets(sessions) {
     // Prefer per-lap data (laps: [{distance, pace}], populated by the backend
-    // from Strava's laps endpoint — see lib/strava.js getLapPaces) over a
+    // from Strava's laps endpoint — see lib/strava.js getLapData) over a
     // session's single whole-activity average. The average blends warm-up +
     // main set + cool-down into one number that doesn't represent any real
     // zone — checked against Anton's actual Strava data: a session that
@@ -720,14 +720,34 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
         }
     };
     const shareBtn = !isPlanned && React.createElement("button", { onClick: handleShare, disabled: sharing, title: "Compartir como historia de Instagram", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#FF6B35] disabled:opacity-50 transition-colors" }, sharing ? React.createElement(Icon.Loader2, { size: 14, className: "animate-spin" }) : React.createElement(Icon.Share, { size: 14 }));
-    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, deleteBtn, shareBtn);
+    // Splits + rest breakdown (e.g. "8x100m · 1:32/100m · desc. 15s"), built
+    // server-side from Strava's real lap data — see lib/strava.js
+    // lapsToSeries. Only present for pool swims recorded on a device that
+    // does automatic length/turn detection (Garmin etc.); open water and
+    // manual entries just won't have `series`.
+    const hasSeries = Array.isArray(s.series) && s.series.length > 0;
+    const [seriesOpen, setSeriesOpen] = useState(false);
+    const seriesToggle = hasSeries && React.createElement("button", {
+        onClick: () => setSeriesOpen((v) => !v),
+        title: "Ver parciales y descansos",
+        className: "tap-target shrink-0 flex items-center gap-1 font-mono text-[10px] text-[#4A8B8C] hover:text-[#7FA9AA] transition-colors",
+    },
+        React.createElement("span", { className: "inline-block transition-transform", style: { transform: seriesOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "▸"),
+        `${s.series.length} serie${s.series.length === 1 ? "" : "s"}`);
+    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, seriesToggle, deleteBtn, shareBtn);
+    const seriesPanel = hasSeries && seriesOpen && React.createElement("div", { className: "mt-2 pt-2 border-t border-[#1E3D4F] space-y-1" },
+        s.series.map((set, i) => React.createElement("div", { key: i, className: "flex items-center gap-3 font-mono text-[11px] text-[#9FB8C4]" },
+            React.createElement("span", { className: "text-[#FF6B35] w-16 shrink-0" }, `${set.reps}×${set.distance}m`),
+            React.createElement("span", { className: "flex items-center gap-1 w-20 shrink-0" }, React.createElement(Icon.Timer, { size: 11 }), set.avgPace, "/100"),
+            set.avgRestSec > 0 && React.createElement("span", { className: "text-[#5A7A87] w-24 shrink-0" }, `desc. ${set.avgRestSec}s`),
+            set.avgHr && React.createElement("span", { className: "text-[#5A7A87]" }, `${set.avgHr} bpm`))));
     // Short automatic note from the coach, attached when this session was
     // first synced from Strava (see lib/coachComment.js) — never regenerated
     // on later re-syncs, so it's a snapshot from the day it landed.
     const coachCommentEl = s.coachComment && React.createElement("div", { className: "flex items-start gap-1.5 mt-2 pt-2 border-t border-[#1E3D4F]" },
         React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wider text-[#7FA9AA] shrink-0 mt-0.5" }, "Entrenador"),
         React.createElement("span", { className: "text-[12px] text-[#9FB8C4] italic" }, s.coachComment));
-    return React.createElement("div", { className: `rounded-xl px-4 py-3 border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, mainRow, coachCommentEl);
+    return React.createElement("div", { className: `rounded-xl px-4 py-3 border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, mainRow, seriesPanel, coachCommentEl);
 }
 // ---- Collapsible session log, grouped by year then month ------------------
 function SessionAccordion({ sessions, paceTargets, onDelete }) {
@@ -778,7 +798,7 @@ function SessionAccordion({ sessions, paceTargets, onDelete }) {
 // protocol swims two dedicated time trials (typically 400m + 100m) and takes
 //   CSS = (400m - 100m) / (T400m - T100m)
 // We don't have dedicated time trials, but real per-lap data (see
-// lib/strava.js getLapPaces) gives the same shape for free: the fastest real
+// lib/strava.js getLapData) gives the same shape for free: the fastest real
 // lap at a short distance vs. the fastest real lap at a long distance, taken
 // from actual training instead of a lab test.
 // POOL_TO_OPENWATER_OFFSET_SEC is defined further below, alongside the race

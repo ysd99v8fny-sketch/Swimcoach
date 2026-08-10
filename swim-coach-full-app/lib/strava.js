@@ -116,7 +116,100 @@ export function isRateLimitClose(res) {
   return shortLimit > 0 && shortUsage / shortLimit > 0.9;
 }
 
-export async function getLapPaces(activityId, accessToken) {
+/**
+ * Groups Strava's raw lap array into swim "series" (e.g. "8x100m") with
+ * real rest time between reps.
+ *
+ * Strava/Garmin represent a rest between reps as its own zero-distance lap
+ * (moving but not going anywhere at the wall) — that's the only place rest
+ * duration actually lives, the whole-session summary doesn't have it.
+ * Heuristic:
+ *  - distance === 0                    -> rest, accumulate its elapsed time
+ *  - same distance as the previous rep,
+ *    without an unusually long rest
+ *    before it                          -> continues the current series
+ *  - anything else                      -> starts a new series
+ *
+ * "Unusually long rest" = more than 60s or 2.5x the average rest seen so
+ * far in the current series — separates e.g. two different 4x100 sets (with
+ * a longer break between sets) from one 8x100. It's a heuristic, not a
+ * guaranteed reconstruction of exactly what was swum.
+ */
+function avg(arr) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+export function lapsToSeries(rawLaps) {
+  if (!Array.isArray(rawLaps) || rawLaps.length === 0) return [];
+
+  const series = [];
+  let current = null;
+  let pendingRestSec = 0;
+
+  const closeCurrent = () => {
+    if (current) series.push(finalizeSeries(current));
+    current = null;
+  };
+
+  for (const lap of rawLaps) {
+    const isRest = !lap.distance || lap.distance === 0;
+    if (isRest) {
+      pendingRestSec += lap.elapsed_time || 0;
+      continue;
+    }
+
+    const longBreak =
+      current &&
+      current.restsSec.length > 0 &&
+      pendingRestSec > Math.max(60, avg(current.restsSec) * 2.5);
+
+    if (current && current.distance === lap.distance && !longBreak) {
+      current.reps += 1;
+      current.timesSec.push(lap.moving_time || lap.elapsed_time || 0);
+      if (pendingRestSec) current.restsSec.push(pendingRestSec);
+      if (lap.average_heartrate) current.hrs.push(lap.average_heartrate);
+    } else {
+      closeCurrent();
+      current = {
+        distance: lap.distance,
+        reps: 1,
+        timesSec: [lap.moving_time || lap.elapsed_time || 0],
+        restsSec: [],
+        hrs: lap.average_heartrate ? [lap.average_heartrate] : [],
+      };
+    }
+    pendingRestSec = 0;
+  }
+  closeCurrent();
+  return series;
+}
+
+function finalizeSeries(group) {
+  const avgTimeSec = avg(group.timesSec);
+  const avgRestSec = group.restsSec.length ? Math.round(avg(group.restsSec)) : 0;
+  const avgHr = group.hrs.length ? Math.round(avg(group.hrs)) : null;
+  const secPer100 = group.distance > 0 ? avgTimeSec / (group.distance / 100) : 0;
+  const m = Math.floor(secPer100 / 60);
+  const s = Math.round(secPer100 % 60);
+  return {
+    reps: group.reps,
+    distance: group.distance,
+    avgTimeSec: Math.round(avgTimeSec),
+    avgPace: `${m}:${String(s).padStart(2, "0")}`,
+    avgRestSec,
+    avgHr,
+  };
+}
+
+/**
+ * Fetches an activity's laps once and returns both:
+ *  - `laps`: flat {distance, pace} pairs for real swim reps — feeds
+ *    calibratePaceTargets/estimateCSS/computePersonalBests/sessionLoad.
+ *  - `series`: reps grouped into sets with rest time between them (see
+ *    lapsToSeries above) — feeds the per-session splits/rest breakdown in
+ *    the training log.
+ */
+export async function getLapData(activityId, accessToken) {
   const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/laps`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -124,7 +217,7 @@ export async function getLapPaces(activityId, accessToken) {
     throw new StravaRateLimitError("Strava rate limit alcanzado");
   }
   if (!res.ok)
-    return { laps: [], rateLimitClose: false };
+    return { laps: [], series: [], rateLimitClose: false };
   const rawLaps = await res.json();
   // Distance + pace per lap, not just a flat pace number — app.js's
   // calibratePaceTargets/estimateCSS/computePersonalBests/sessionLoad all
@@ -136,7 +229,8 @@ export async function getLapPaces(activityId, accessToken) {
         .map((l) => ({ distance: l.distance, pace: l.moving_time / (l.distance / 100) }))
         .filter((l) => l.pace > 40 && l.pace < 240)
     : [];
-  return { laps, rateLimitClose: isRateLimitClose(res) };
+  const series = lapsToSeries(rawLaps);
+  return { laps, series, rateLimitClose: isRateLimitClose(res) };
 }
 
 export const SWIM_TYPES = new Set(["Swim"]);
