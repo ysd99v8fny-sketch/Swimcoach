@@ -39,17 +39,20 @@ export default async function handler(req, res) {
       // Per-lap { distance, pace } pairs, not just the whole-session average —
       // see the comment on getLapData for why this matters for both
       // calibratePaceTargets and the CSS-based training load. Also grabs
-      // `series` (reps grouped into sets with rest time between them) for
-      // the splits/rest breakdown shown per session. One activity per
+      // `series` (reps grouped into sets with rest time between them) and
+      // `detail` (every individual lap, ungrouped, with the rest before it)
+      // for the splits/rest breakdown shown per session. One activity per
       // webhook call, so rate limiting here is a non-issue — just fall back
       // to no lap data if anything goes wrong.
       try {
-        const { laps, series } = await getLapData(event.object_id, accessToken);
+        const { laps, series, detail } = await getLapData(event.object_id, accessToken);
         session.laps = laps;
         session.series = series;
+        session.detail = detail;
       } catch (e) {
         session.laps = [];
         session.series = [];
+        session.detail = [];
       }
 
       await upsertSessions([session]);

@@ -697,6 +697,7 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
     const notationEl = s.notation && React.createElement("span", { className: "font-mono text-xs bg-[#142F42] rounded-full px-2 py-0.5 text-[#FF6B35] shrink-0" }, s.notation);
     const deviationEl = deviation && React.createElement("span", { className: `font-mono text-[10px] rounded-full px-2 py-0.5 shrink-0 ${deviation === "rápido" ? "bg-[#FF6B35]/15 text-[#FF6B35]" : "bg-[#4A8B8C]/15 text-[#7FA9AA]"}` }, "⚠ ", deviation, ` (obj. ${target[0]}-${target[1]}s)`);
     const notesEl = s.notes && React.createElement("span", { className: "text-[#9FB8C4] truncate" }, s.notes);
+    const sufferEl = typeof s.sufferScore === "number" && React.createElement("span", { title: "Esfuerzo relativo (Strava)", className: "font-mono text-[10px] flex items-center gap-1 bg-[#FF6B35]/10 text-[#FF6B35] rounded-full px-2 py-0.5 shrink-0" }, React.createElement(Icon.Zap, { size: 10 }), s.sufferScore);
     const deleteBtn = isPlanned && onDelete && React.createElement("button", { onClick: () => onDelete(s.id), title: "Borrar propuesta", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#E8453C] transition-colors" }, React.createElement(Icon.X, { size: 14 }));
     // Generates a 1080x1920 Instagram Story image for this completed session
     // (see buildStoryCanvas / shareSessionStory above) and opens the native
@@ -720,34 +721,35 @@ function SessionCard({ s, sessions, paceTargets, onDelete }) {
         }
     };
     const shareBtn = !isPlanned && React.createElement("button", { onClick: handleShare, disabled: sharing, title: "Compartir como historia de Instagram", className: "tap-target ml-auto shrink-0 text-[#5A7A87] hover:text-[#FF6B35] disabled:opacity-50 transition-colors" }, sharing ? React.createElement(Icon.Loader2, { size: 14, className: "animate-spin" }) : React.createElement(Icon.Share, { size: 14 }));
-    // Splits + rest breakdown (e.g. "8x100m · 1:32/100m · desc. 15s"), built
-    // server-side from Strava's real lap data — see lib/strava.js
-    // lapsToSeries. Only present for pool swims recorded on a device that
-    // does automatic length/turn detection (Garmin etc.); open water and
-    // manual entries just won't have `series`.
-    const hasSeries = Array.isArray(s.series) && s.series.length > 0;
-    const [seriesOpen, setSeriesOpen] = useState(false);
-    const seriesToggle = hasSeries && React.createElement("button", {
-        onClick: () => setSeriesOpen((v) => !v),
-        title: "Ver parciales y descansos",
+    // Full lap-by-lap breakdown (every individual rep, in order, with the
+    // rest before it), built server-side from Strava's real lap data — see
+    // lib/strava.js lapsToDetail. Only present for pool swims recorded on a
+    // device that does automatic length/turn detection (Garmin etc.); open
+    // water and manual entries just won't have `detail`.
+    const hasDetail = Array.isArray(s.detail) && s.detail.length > 0;
+    const [detailOpen, setDetailOpen] = useState(false);
+    const detailToggle = hasDetail && React.createElement("button", {
+        onClick: () => setDetailOpen((v) => !v),
+        title: "Ver todos los parciales, metros, ritmo y descansos",
         className: "tap-target shrink-0 flex items-center gap-1 font-mono text-[10px] text-[#4A8B8C] hover:text-[#7FA9AA] transition-colors",
     },
-        React.createElement("span", { className: "inline-block transition-transform", style: { transform: seriesOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "▸"),
-        `${s.series.length} serie${s.series.length === 1 ? "" : "s"}`);
-    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, notationEl, deviationEl, notesEl, seriesToggle, deleteBtn, shareBtn);
-    const seriesPanel = hasSeries && seriesOpen && React.createElement("div", { className: "mt-2 pt-2 border-t border-[#1E3D4F] space-y-1" },
-        s.series.map((set, i) => React.createElement("div", { key: i, className: "flex items-center gap-3 font-mono text-[11px] text-[#9FB8C4]" },
-            React.createElement("span", { className: "text-[#FF6B35] w-16 shrink-0" }, `${set.reps}×${set.distance}m`),
-            React.createElement("span", { className: "flex items-center gap-1 w-20 shrink-0" }, React.createElement(Icon.Timer, { size: 11 }), set.avgPace, "/100"),
-            set.avgRestSec > 0 && React.createElement("span", { className: "text-[#5A7A87] w-24 shrink-0" }, `desc. ${set.avgRestSec}s`),
-            set.avgHr && React.createElement("span", { className: "text-[#5A7A87]" }, `${set.avgHr} bpm`))));
+        React.createElement("span", { className: "inline-block transition-transform", style: { transform: detailOpen ? "rotate(90deg)" : "rotate(0deg)" } }, "▸"),
+        `${s.detail.length} parcial${s.detail.length === 1 ? "" : "es"}`);
+    const mainRow = React.createElement("div", { className: "flex items-center gap-4 text-sm flex-wrap" }, badge, typeIcon, dateEl, distEl, locationEl, paceEl, sparkEl, hrEl, sufferEl, notationEl, deviationEl, notesEl, detailToggle, deleteBtn, shareBtn);
+    const detailPanel = hasDetail && detailOpen && React.createElement("div", { className: "mt-2 pt-2 border-t border-[#1E3D4F]" },
+        React.createElement("div", { className: "space-y-1 max-h-64 overflow-y-auto pr-1" }, s.detail.map((lap, i) => React.createElement("div", { key: i, className: "flex items-center gap-3 font-mono text-[11px] text-[#9FB8C4]" },
+            React.createElement("span", { className: "text-[#5A7A87] w-6 shrink-0 text-right" }, i + 1),
+            React.createElement("span", { className: "text-[#FF6B35] w-16 shrink-0" }, `${lap.distance}m`),
+            React.createElement("span", { className: "flex items-center gap-1 w-20 shrink-0" }, React.createElement(Icon.Timer, { size: 11 }), lap.pace, "/100"),
+            lap.restBeforeSec > 0 && React.createElement("span", { className: "text-[#5A7A87] w-24 shrink-0" }, `desc. ${lap.restBeforeSec}s`),
+            lap.avgHr && React.createElement("span", { className: "text-[#5A7A87]" }, `${lap.avgHr} bpm`)))));
     // Short automatic note from the coach, attached when this session was
     // first synced from Strava (see lib/coachComment.js) — never regenerated
     // on later re-syncs, so it's a snapshot from the day it landed.
     const coachCommentEl = s.coachComment && React.createElement("div", { className: "flex items-start gap-1.5 mt-2 pt-2 border-t border-[#1E3D4F]" },
         React.createElement("span", { className: "font-mono text-[9px] uppercase tracking-wider text-[#7FA9AA] shrink-0 mt-0.5" }, "Entrenador"),
         React.createElement("span", { className: "text-[12px] text-[#9FB8C4] italic" }, s.coachComment));
-    return React.createElement("div", { className: `rounded-xl px-4 py-3 border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, mainRow, seriesPanel, coachCommentEl);
+    return React.createElement("div", { className: `rounded-xl px-4 py-3 border-l-2 ${isPlanned ? "bg-[#0E2634]/40 border-l-[#E8C547]" : isDry ? "bg-[#0E2634]/60 border-[#1E3D4F] border-l-[#5A7A87] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]" : "bg-[#0E2634] border-[#1E3D4F] border-l-[#4A8B8C] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.35)]"}`, style: { borderTopColor: "#1E3D4F", borderRightColor: "#1E3D4F", borderBottomColor: "#1E3D4F", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderStyle: isPlanned ? "dashed" : "solid" } }, mainRow, detailPanel, coachCommentEl);
 }
 // ---- Collapsible session log, grouped by year then month ------------------
 function SessionAccordion({ sessions, paceTargets, onDelete }) {

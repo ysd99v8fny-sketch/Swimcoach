@@ -81,6 +81,9 @@ export function activityToSession(a) {
     notation: "",
     location,
     notes: a.name && !/^(Morning|Afternoon|Evening|Lunch|Night) Swim$/.test(a.name) ? a.name : "Strava",
+    // Strava's "Relative Effort" — only present on activities with heart
+    // rate data. Comes straight off the activity object, no extra request.
+    sufferScore: typeof a.suffer_score === "number" ? a.suffer_score : null,
   };
 }
 
@@ -201,13 +204,50 @@ function finalizeSeries(group) {
   };
 }
 
+function pace100Str(secPer100) {
+  const m = Math.floor(secPer100 / 60);
+  const s = Math.round(Math.max(0, secPer100) % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 /**
- * Fetches an activity's laps once and returns both:
+ * Every real swim lap, in order, exactly as Strava recorded it — no
+ * grouping, no outlier filtering. Each entry carries the rest that came
+ * immediately before it (0 if there wasn't one), so the training log can
+ * show "lap 7, 100m, 1:28/100, desc. 42s" for every single rep.
+ */
+export function lapsToDetail(rawLaps) {
+  if (!Array.isArray(rawLaps) || rawLaps.length === 0) return [];
+  const out = [];
+  let pendingRestSec = 0;
+  for (const lap of rawLaps) {
+    const isRest = !lap.distance || lap.distance === 0;
+    if (isRest) {
+      pendingRestSec += lap.elapsed_time || 0;
+      continue;
+    }
+    const timeSec = lap.moving_time || lap.elapsed_time || 0;
+    const secPer100 = lap.distance > 0 ? timeSec / (lap.distance / 100) : 0;
+    out.push({
+      distance: lap.distance,
+      timeSec: Math.round(timeSec),
+      pace: pace100Str(secPer100),
+      restBeforeSec: Math.round(pendingRestSec),
+      avgHr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
+    });
+    pendingRestSec = 0;
+  }
+  return out;
+}
+
+/**
+ * Fetches an activity's laps once and returns:
  *  - `laps`: flat {distance, pace} pairs for real swim reps — feeds
  *    calibratePaceTargets/estimateCSS/computePersonalBests/sessionLoad.
  *  - `series`: reps grouped into sets with rest time between them (see
- *    lapsToSeries above) — feeds the per-session splits/rest breakdown in
- *    the training log.
+ *    lapsToSeries above).
+ *  - `detail`: every individual lap, ungrouped, with the rest before it —
+ *    feeds the full lap-by-lap breakdown in the training log.
  */
 export async function getLapData(activityId, accessToken) {
   const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}/laps`, {
@@ -217,7 +257,7 @@ export async function getLapData(activityId, accessToken) {
     throw new StravaRateLimitError("Strava rate limit alcanzado");
   }
   if (!res.ok)
-    return { laps: [], series: [], rateLimitClose: false };
+    return { laps: [], series: [], detail: [], rateLimitClose: false };
   const rawLaps = await res.json();
   // Distance + pace per lap, not just a flat pace number — app.js's
   // calibratePaceTargets/estimateCSS/computePersonalBests/sessionLoad all
@@ -230,7 +270,8 @@ export async function getLapData(activityId, accessToken) {
         .filter((l) => l.pace > 40 && l.pace < 240)
     : [];
   const series = lapsToSeries(rawLaps);
-  return { laps, series, rateLimitClose: isRateLimitClose(res) };
+  const detail = lapsToDetail(rawLaps);
+  return { laps, series, detail, rateLimitClose: isRateLimitClose(res) };
 }
 
 export const SWIM_TYPES = new Set(["Swim"]);

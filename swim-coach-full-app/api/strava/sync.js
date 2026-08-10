@@ -35,10 +35,11 @@ async function mapWithConcurrency(items, limit, fn) {
 // upsert keyed by activity id, so nothing gets duplicated.
 //
 // For each swim it also fetches per-lap splits and stores them as `laps`
-// ({ distance, pace } per lap, feeds pace calibration/CSS/PRs) and `series`
+// ({ distance, pace } per lap, feeds pace calibration/CSS/PRs), `series`
 // (reps grouped into sets with real rest time between them, e.g. "8x100m,
-// descanso 15s" — feeds the splits/rest breakdown shown per session) — see
-// lib/strava.js getLapData. That's one extra Strava call per swim, which on
+// descanso 15s"), and `detail` (every individual lap, ungrouped, with the
+// rest before it — feeds the full lap-by-lap breakdown shown per session)
+// — see lib/strava.js getLapData. That's one extra Strava call per swim, which on
 // a big history can hit Strava's 15-minute rate limit in a single run. This
 // is handled by:
 //   - Skipping the lap fetch for any swim that already has laps stored
@@ -62,10 +63,13 @@ export default async function handler(req, res) {
   try {
     const token = await getValidAccessToken();
 
-    // Activities that already have real lap data don't need to be re-fetched.
+    // Activities that already have the full lap-by-lap detail don't need to
+    // be re-fetched. Keyed on `detail` (not `laps`) so sessions synced before
+    // the per-lap breakdown existed get backfilled exactly once, the next
+    // time "sincronizar" runs.
     const existing = await getSessions();
-    const idsWithLaps = new Set(
-      existing.filter((s) => Array.isArray(s.laps) && s.laps.length > 0).map((s) => s.id)
+    const idsWithDetail = new Set(
+      existing.filter((s) => Array.isArray(s.detail) && s.detail.length > 0).map((s) => s.id)
     );
 
     let page = 1;
@@ -97,17 +101,19 @@ export default async function handler(req, res) {
 
       const pageSessions = await mapWithConcurrency(swims, LAP_FETCH_CONCURRENCY, async (a, _i, stop) => {
         const session = activityToSession(a);
-        if (idsWithLaps.has(session.id)) {
-          // Already have laps for this one — keep them, don't spend a request.
+        if (idsWithDetail.has(session.id)) {
+          // Already have full lap detail for this one — keep it, don't spend a request.
           const prior = existing.find((s) => s.id === session.id);
           session.laps = prior?.laps || [];
           session.series = prior?.series || [];
+          session.detail = prior?.detail || [];
           return session;
         }
         try {
-          const { laps, series, rateLimitClose } = await getLapData(a.id, token);
+          const { laps, series, detail, rateLimitClose } = await getLapData(a.id, token);
           session.laps = laps;
           session.series = series;
+          session.detail = detail;
           lapsFetched += 1;
           if (rateLimitClose) {
             rateLimited = true;
@@ -121,6 +127,7 @@ export default async function handler(req, res) {
           }
           session.laps = [];
           session.series = [];
+          session.detail = [];
         }
         return session;
       });
