@@ -36,15 +36,16 @@ export default async function handler(req, res) {
       if (!SWIM_TYPES.has(activity.type || activity.sport_type)) return;
 
       const session = activityToSession(activity);
-      // Per-lap paces, not just the whole-session average — see the comment
-      // on getLapPaces for why this matters for calibratePaceTargets. One
-      // activity per webhook call, so rate limiting here is a non-issue —
-      // just fall back to no lap data if anything goes wrong.
+      // Per-lap { distance, pace } pairs, not just the whole-session average —
+      // see the comment on getLapPaces for why this matters for both
+      // calibratePaceTargets and the CSS-based training load. One activity
+      // per webhook call, so rate limiting here is a non-issue — just fall
+      // back to no lap data if anything goes wrong.
       try {
-        const { paces } = await getLapPaces(event.object_id, accessToken);
-        session.lapPaces = paces;
+        const { laps } = await getLapPaces(event.object_id, accessToken);
+        session.laps = laps;
       } catch (e) {
-        session.lapPaces = [];
+        session.laps = [];
       }
 
       await upsertSessions([session]);

@@ -34,6 +34,7 @@ nueva automáticamente en cuanto la subes a Strava — sin que tengas que tocar 
    - `STRAVA_CLIENT_SECRET`
    - `STRAVA_WEBHOOK_VERIFY_TOKEN` — invéntate cualquier cadena aleatoria, ej. `anton-swim-2026-xk9`
    - `ANTHROPIC_API_KEY`
+   - `APP_SECRET` — invéntate otra cadena/código de acceso (ej. `anton-2026`); es lo que la app te pedirá una vez en el navegador para poder usarla. Sin esta variable, todos los endpoints devuelven error 500.
 4. Dale a **Deploy**. En 1-2 minutos tendrás una URL tipo `https://swim-coach-app.vercel.app`.
 
 ## Paso 4 — Conectar la base de datos (Upstash Redis vía Marketplace)
@@ -63,11 +64,7 @@ Te llevará a Strava para autorizar la app. Al aceptar, verás una pantalla de c
 
 ## Paso 7 — Sincronización inicial (backfill del histórico)
 
-Abre:
-```
-https://TU-DOMINIO.vercel.app/api/strava/sync
-```
-Esto trae **todo** tu histórico de natación desde Strava (puede tardar unos segundos si tienes muchas sesiones). Verás un JSON confirmando cuántas sesiones se guardaron. Puedes volver a visitar esta URL cuando quieras forzar una resincronización completa — también hay un botón **"sincronizar Strava"** dentro de la propia app para esto.
+La primera vez que abras la app en el navegador te pedirá el código de acceso (`APP_SECRET` que pusiste en el paso 3) — lo guarda en ese navegador y no lo vuelve a pedir. Pulsa **"sincronizar Strava"** dentro de la app para traer todo tu histórico (puede tardar unos segundos si tienes muchas sesiones).
 
 ## Paso 8 — Registrar el webhook (la parte que automatiza todo)
 
@@ -95,15 +92,15 @@ Igual que antes: abre la URL de Vercel en Safari → Compartir → "Añadir a pa
 |---|---|
 | `GET /api/strava/auth` | Redirige a Strava para autorizar la app (una vez) |
 | `GET /api/strava/callback` | Recibe el código de Strava y guarda los tokens |
-| `GET /api/strava/sync` | Backfill / resincronización manual de todo el histórico |
+| `GET /api/strava/sync` | Backfill / resincronización manual de todo el histórico (requiere código de acceso) |
 | `GET\|POST /api/strava/webhook` | Verificación + recepción de eventos en tiempo real |
-| `GET\|POST /api/sessions` | La app lee/escribe el registro de sesiones |
-| `POST /api/coach` | Proxy seguro al chat de Claude (la clave nunca sale del servidor) |
+| `GET\|POST\|DELETE /api/sessions` | La app lee/escribe el registro de sesiones (requiere código de acceso) |
+| `POST /api/coach` | Proxy seguro al chat de Claude (requiere código de acceso) |
 
 ## Seguridad
 
-- Las claves (`STRAVA_CLIENT_SECRET`, `ANTHROPIC_API_KEY`) viven solo en las variables de entorno de Vercel — nunca llegan al navegador.
-- La app es de un único usuario (tú); no hay login porque no hay multi-usuario. Si en algún momento quieres compartirla con más gente, avísame y le añadimos autenticación.
+- Las claves (`STRAVA_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `APP_SECRET`) viven solo en las variables de entorno de Vercel — nunca llegan al navegador salvo el código de acceso que tú mismo escribes al usar la app.
+- El repo es público en GitHub, así que todos los endpoints de datos exigen ese código de acceso (`x-app-secret`) — sin él, cualquiera que encuentre la URL podría leer o borrar tu historial, o gastar tu crédito de Anthropic.
 
 ## Actualizar la app más adelante
 
