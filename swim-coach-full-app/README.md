@@ -95,7 +95,6 @@ Igual que antes: abre la URL de Vercel en Safari → Compartir → "Añadir a pa
 | `GET /api/strava/sync` | Backfill / resincronización manual de todo el histórico (requiere código de acceso) |
 | `GET\|POST /api/strava/webhook` | Verificación + recepción de eventos en tiempo real |
 | `GET\|POST\|DELETE /api/sessions` | La app lee/escribe el registro de sesiones (requiere código de acceso) |
-| `POST /api/coach` | Proxy seguro al chat de Claude (requiere código de acceso) |
 
 ## Seguridad
 
