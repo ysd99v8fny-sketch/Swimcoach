@@ -3,17 +3,22 @@ import { Redis } from "@upstash/redis";
 const kv = Redis.fromEnv();
 
 const TOKEN_KEY = "withings:tokens";
-const METRICS_KEY = "withings:metrics";
+const METRICS_KEY = "withings:metrics"; // último snapshot de composición corporal
 
+// Tipos de medida de la API de Withings (https://developer.withings.com/api-reference)
 const MEASTYPE = {
-  WEIGHT: 1,
-  HEIGHT: 4,
-  FAT_RATIO: 6,
-  MUSCLE_MASS: 76,
-  HYDRATION: 77,
+  WEIGHT: 1, // kg
+  HEIGHT: 4, // metros
+  FAT_RATIO: 6, // %
+  MUSCLE_MASS: 76, // kg
+  HYDRATION: 77, // kg
 };
 const REQUESTED_TYPES = Object.values(MEASTYPE).join(",");
 
+/**
+ * Devuelve un access_token válido, refrescándolo antes si ha caducado
+ * o está a punto de caducar. Igual patrón que getValidAccessToken() de Strava.
+ */
 export async function getValidAccessToken() {
   const tokens = await kv.get(TOKEN_KEY);
   if (!tokens) {
@@ -56,6 +61,16 @@ export async function saveInitialTokens(body) {
   });
 }
 
+/**
+ * Pide a Withings las últimas mediciones de composición corporal y las
+ * convierte a un objeto plano legible. category=1 = mediciones reales
+ * (no objetivos manuales).
+ *
+ * La báscula a veces manda el peso y la composición corporal (bioimpedancia)
+ * en grupos de medición distintos, con unos segundos de diferencia. Por eso
+ * fusionamos todos los grupos dentro de una ventana de 5 minutos del más
+ * reciente, en vez de quedarnos solo con el grupo de fecha exacta más nueva.
+ */
 export async function fetchLatestBodyMetrics() {
   const accessToken = await getValidAccessToken();
 
@@ -80,11 +95,15 @@ export async function fetchLatestBodyMetrics() {
   const groups = data.body?.measuregrps || [];
   if (groups.length === 0) return null;
 
-  const latest = groups.reduce((a, b) => (a.date > b.date ? a : b));
+  const newestDate = Math.max(...groups.map((g) => g.date));
+  const recentGroups = groups.filter((g) => newestDate - g.date <= 300);
 
   const raw = {};
-  for (const m of latest.measures) {
-    raw[m.type] = m.value * Math.pow(10, m.unit);
+  for (const g of recentGroups) {
+    for (const m of g.measures) {
+      // Withings da el valor real como value * 10^unit
+      raw[m.type] = m.value * Math.pow(10, m.unit);
+    }
   }
 
   const weightKg = raw[MEASTYPE.WEIGHT] ?? null;
@@ -94,10 +113,12 @@ export async function fetchLatestBodyMetrics() {
   const hydrationKg = raw[MEASTYPE.HYDRATION] ?? null;
 
   const metrics = {
-    date: new Date(latest.date * 1000).toISOString().slice(0, 10),
+    date: new Date(newestDate * 1000).toISOString().slice(0, 10),
     weightKg: weightKg != null ? round1(weightKg) : null,
     heightCm: heightM != null ? round1(heightM * 100) : null,
     fatPct: fatRatioPct != null ? round1(fatRatioPct) : null,
+    // Withings no da músculo/agua en % directamente, solo en kg — se calculan
+    // sobre el peso del mismo pesaje.
     musclePct: muscleMassKg != null && weightKg ? round1((muscleMassKg / weightKg) * 100) : null,
     waterPct: hydrationKg != null && weightKg ? round1((hydrationKg / weightKg) * 100) : null,
   };
