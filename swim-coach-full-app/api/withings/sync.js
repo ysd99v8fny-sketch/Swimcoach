@@ -1,11 +1,10 @@
 import { getValidAccessToken } from "../../lib/withings.js";
 
-// GET /api/withings/sync?debug=1
-// Versión temporal de depuración: muestra la respuesta cruda de Withings
-// tal cual, sin procesar, para ver qué tipos de medida llegan de verdad.
+// GET /api/withings/sync — debug ampliado
 export default async function handler(req, res) {
   try {
     const accessToken = await getValidAccessToken();
+    const now = Math.floor(Date.now() / 1000);
 
     const wRes = await fetch("https://wbsapi.withings.net/measure", {
       method: "POST",
@@ -15,8 +14,9 @@ export default async function handler(req, res) {
       },
       body: new URLSearchParams({
         action: "getmeas",
-        meastypes: "1,4,6,76,77",
         category: "1",
+        startdate: String(now - 86400),
+        enddate: String(now + 3600),
       }),
     });
 
