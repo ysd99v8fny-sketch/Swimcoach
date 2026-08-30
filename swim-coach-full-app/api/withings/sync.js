@@ -1,18 +1,27 @@
-import { fetchLatestBodyMetrics } from "../../lib/withings.js";
+import { getValidAccessToken } from "../../lib/withings.js";
 
-// GET /api/withings/sync
-// Pide a Withings el pesaje más reciente (peso, altura, % grasa, % músculo,
-// % agua) y lo guarda en Redis. Visítala cuando quieras forzar una
-// actualización manual — también puedes llamarla desde un botón en la app,
-// igual que "sincronizar Strava".
+// GET /api/withings/sync?debug=1
+// Versión temporal de depuración: muestra la respuesta cruda de Withings
+// tal cual, sin procesar, para ver qué tipos de medida llegan de verdad.
 export default async function handler(req, res) {
   try {
-    const metrics = await fetchLatestBodyMetrics();
-    if (!metrics) {
-      res.status(200).json({ ok: true, message: "Sin mediciones nuevas en Withings.", metrics: null });
-      return;
-    }
-    res.status(200).json({ ok: true, metrics });
+    const accessToken = await getValidAccessToken();
+
+    const wRes = await fetch("https://wbsapi.withings.net/measure", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: new URLSearchParams({
+        action: "getmeas",
+        meastypes: "1,4,6,76,77",
+        category: "1",
+      }),
+    });
+
+    const data = await wRes.json();
+    res.status(200).json(data);
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
