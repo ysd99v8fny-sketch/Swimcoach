@@ -616,18 +616,16 @@ async function buildStoryCanvas(session) {
         ctx.font = "italic 400 38px Inter";
         wrapText(ctx, session.coachComment, STORY_W - marginX * 2 - boxPad * 2).slice(0, 5).forEach((line, i) => ctx.fillText(line, marginX + boxPad, boxY + 120 + i * 48));
     }
-    // Waves + season countdown footer — fixed position regardless of how
-    // much content is above, so the bottom of the card always looks the same.
+    // Waves + season footer — fixed position regardless of how much content
+    // is above, so the bottom of the card always looks the same.
     const waveBaseY = STORY_H - 420;
     drawStoryWaves(ctx, waveBaseY);
-    const nextRace = RACES.find((r) => new Date(r.date) >= TODAY) || RACES[RACES.length - 1];
-    const daysLeft = daysBetween(TODAY, nextRace.date);
     ctx.fillStyle = "#EAF2F2";
     ctx.font = "600 44px 'IBM Plex Mono'";
-    ctx.fillText(daysLeft >= 0 ? `${daysLeft} DÍAS PARA ${nextRace.name.toUpperCase()}` : nextRace.name.toUpperCase(), marginX, STORY_H - 120);
+    ctx.fillText("PRETEMPORADA 2026–27", marginX, STORY_H - 120);
     ctx.fillStyle = "#7FA9AA";
     ctx.font = "400 32px Inter";
-    ctx.fillText(`${nextRace.distance.toLocaleString("es-ES")}m · ${new Date(nextRace.date).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}`, marginX, STORY_H - 70);
+    ctx.fillText("Cuaderno de entrenamiento — Anton", marginX, STORY_H - 70);
     return canvas;
 }
 // Builds the story image and either opens the native share sheet (mobile,
@@ -1295,15 +1293,6 @@ function SwimCoach() {
         return () => observer.disconnect();
     }, [loaded]);
     const nextRace = RACES.find((r) => new Date(r.date) >= TODAY) || RACES[RACES.length - 1];
-    const daysLeft = daysBetween(TODAY, nextRace.date);
-    // Same urgency color drives both the number itself and the soft glow
-    // behind it — a small "premium hero" touch (WHOOP-style oversized,
-    // glanceable primary stat) instead of a flat static number.
-    const heroGlowColor = daysLeft <= 3 ? "#E8453C" : daysLeft <= 10 ? "#FF6B35" : "#4A8B8C";
-    // The other race of the season — shown as a smaller secondary countdown
-    // next to the main one so both objectives stay visible, not just
-    // whichever one happens to be soonest.
-    const otherRace = RACES.find((r) => r.id !== nextRace.id);
     const loadSessions = async () => {
         try {
             const res = await fetch("/api/sessions", { headers: authHeaders() });
@@ -1467,24 +1456,6 @@ function SwimCoach() {
                 ["#registro", "Registro", "registro"],
                 ["#natacion", "Natación", "natacion"],
             ].map(([href, label, id]) => React.createElement("a", { key: href, href: href, className: `shrink-0 font-mono text-[10px] uppercase tracking-wide transition-colors border-b pb-0.5 ${activeSection === id ? "text-[#FF6B35] border-[#FF6B35]" : "text-[#7FA9AA] hover:text-[#4A8B8C] border-transparent hover:border-[#4A8B8C]"}` }, label))),
-            React.createElement("div", { className: "mb-8" },
-                React.createElement("div", { className: "flex items-end gap-4 flex-wrap" },
-                    React.createElement("div", { className: "font-display text-[88px] leading-none font-semibold tabular-nums transition-colors duration-700", style: { color: heroGlowColor, textShadow: `0 0 60px ${heroGlowColor}55` } }, daysLeft),
-                    React.createElement("div", { className: "pb-3" },
-                        React.createElement("div", { className: "font-display text-xl uppercase tracking-wide" },
-                            "días hasta ",
-                            nextRace.name),
-                        React.createElement("div", { className: "text-[#9FB8C4] text-sm font-mono mt-1" },
-                            fmtDate(nextRace.date),
-                            " · ",
-                            nextRace.distance.toLocaleString("es-ES"),
-                            "m · fase ",
-                            nextRace.phase))),
-                React.createElement("div", { className: "mt-2 text-sm text-[#9FB8C4] max-w-xl" }, "Última semana de puesta a punto. Volumen bajo, intensidad mantenida, prioridad al descanso."),
-                otherRace && React.createElement("div", { className: "mt-3 flex items-center gap-2 flex-wrap" },
-                    React.createElement("span", { className: "font-mono text-[10px] uppercase tracking-wider text-[#5A7A87]" }, "también este año"),
-                    React.createElement("span", { className: "font-mono text-xs text-[#7FA9AA] bg-[#0E2634] border border-[#1E3D4F] rounded-full px-3 py-1" },
-                        daysBetween(TODAY, otherRace.date), " días · ", otherRace.name, " · ", otherRace.distance.toLocaleString("es-ES"), "m"))),
             React.createElement(WaveDivider, null),
             React.createElement("div", { id: "temporada", className: "my-12 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2] mb-3" }, "Temporada — sep 25 a oct 26"),
