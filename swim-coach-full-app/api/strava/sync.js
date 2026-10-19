@@ -1,4 +1,4 @@
-import { getValidAccessToken, activityToSession, getLapData, StravaRateLimitError, isRateLimitClose, SWIM_TYPES } from "../../lib/strava.js";
+import { getValidAccessToken, activityToSession, getLapData, StravaRateLimitError, isRateLimitClose, SWIM_TYPES, STRENGTH_TYPES } from "../../lib/strava.js";
 import { getSessions, upsertSessions } from "../../lib/sessions.js";
 import { requireAuth } from "../../lib/auth.js";
 
@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     let page = 1;
     const perPage = 200;
     let totalSwimsFound = 0;
+    let totalStrengthFound = 0;
     let lapsFetched = 0;
     let fetched = 0;
     let lastMerged = existing;
@@ -98,6 +99,11 @@ export default async function handler(req, res) {
 
       fetched += batch.length;
       const swims = batch.filter((a) => SWIM_TYPES.has(a.type || a.sport_type));
+      // Strength sessions: no laps to fetch, so they cost no extra requests.
+      const strength = batch
+        .filter((a) => STRENGTH_TYPES.has(a.sport_type || a.type))
+        .map((a) => activityToSession(a));
+      totalStrengthFound += strength.length;
 
       const pageSessions = await mapWithConcurrency(swims, LAP_FETCH_CONCURRENCY, async (a, _i, stop) => {
         const session = activityToSession(a);
@@ -135,8 +141,9 @@ export default async function handler(req, res) {
 
       // Upsert whatever this batch produced — even if we're about to stop
       // for rate limiting, this much progress is saved.
-      lastMerged = await upsertSessions(pageSessions);
-      existing.push(...pageSessions.filter((s) => !existing.some((e) => e.id === s.id)));
+      const pageAll = [...pageSessions, ...strength];
+      lastMerged = await upsertSessions(pageAll);
+      existing.push(...pageAll.filter((s) => !existing.some((e) => e.id === s.id)));
 
       if (rateLimited) break outer;
       if (batch.length < perPage) break;
@@ -148,6 +155,7 @@ export default async function handler(req, res) {
       ok: true,
       activities_scanned: fetched,
       swims_found: totalSwimsFound,
+      strength_found: totalStrengthFound,
       laps_fetched: lapsFetched,
       total_stored: lastMerged.length,
       rate_limited: rateLimited,

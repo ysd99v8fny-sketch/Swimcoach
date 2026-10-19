@@ -57,6 +57,22 @@ export async function saveInitialTokens(tokenResponse) {
 
 /** Convert a raw Strava activity into the shape the app's session log uses. */
 export function activityToSession(a) {
+  // Strength / gym sessions (Baigene) become "seco" entries: no distance or
+  // pace, just duration + HR, which the frontend turns into training load.
+  if (STRENGTH_TYPES.has(a.sport_type || a.type)) {
+    return {
+      id: String(a.id),
+      type: "seco",
+      date: (a.start_date_local || a.start_date || "").slice(0, 10),
+      distance: 0,
+      pace: "",
+      hr: a.average_heartrate ? String(Math.round(a.average_heartrate)) : "",
+      notation: "",
+      durationMin: Math.round((a.moving_time || a.elapsed_time || 0) / 60),
+      notes: a.name || "Fuerza",
+      sufferScore: typeof a.suffer_score === "number" ? a.suffer_score : null,
+    };
+  }
   const distance = Math.round(a.distance || 0);
   const movingTime = a.moving_time || 0;
   let pace = "";
@@ -275,3 +291,6 @@ export async function getLapData(activityId, accessToken) {
 }
 
 export const SWIM_TYPES = new Set(["Swim"]);
+// Dry-land strength work that should count towards training load (Baigene
+// gym sessions are recorded as WeightTraining).
+export const STRENGTH_TYPES = new Set(["WeightTraining", "Workout", "Crossfit"]);

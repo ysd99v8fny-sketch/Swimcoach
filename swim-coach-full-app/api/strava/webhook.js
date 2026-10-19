@@ -1,4 +1,4 @@
-import { getValidAccessToken, activityToSession, getLapData, SWIM_TYPES } from "../../lib/strava.js";
+import { getValidAccessToken, activityToSession, getLapData, SWIM_TYPES, STRENGTH_TYPES } from "../../lib/strava.js";
 import { upsertSessions } from "../../lib/sessions.js";
 
 // GET  /api/strava/webhook  — Strava's one-time subscription handshake.
@@ -33,6 +33,12 @@ export default async function handler(req, res) {
       if (!detailRes.ok) return;
 
       const activity = await detailRes.json();
+      const kind = activity.sport_type || activity.type;
+      if (STRENGTH_TYPES.has(kind)) {
+        // Strength session (Baigene): no laps, store as a "seco" entry.
+        await upsertSessions([activityToSession(activity)]);
+        return;
+      }
       if (!SWIM_TYPES.has(activity.type || activity.sport_type)) return;
 
       const session = activityToSession(activity);
