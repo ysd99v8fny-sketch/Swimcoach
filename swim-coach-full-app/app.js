@@ -1390,6 +1390,163 @@ function MonthlyMetersLineChart({ sessions }) {
             React.createElement("span", null, "punto naranja = mes en curso (parcial)"))));
 }
 // ---- Main app ---------------------------------------------------------
+// ---- Recuperación (Garmin) -------------------------------------------------
+// Los datos llegan desde el reloj vía scripts/garmin_sync.py (corre en el Mac)
+// → POST /api/wellness → Redis. Aquí solo se leen y se interpretan.
+const RECOVERY_COLORS = { verde: "#4A8B8C", ambar: "#E8C547", rojo: "#E8453C" };
+function recoveryVerdict(day, history) {
+    let pts = 0;
+    const reasons = [];
+    const { hrv_avg: hrv, hrv_low: lo, hrv_high: hi } = day;
+    if (hrv != null && lo != null && hi != null) {
+        if (hrv < lo) {
+            pts += 2;
+            reasons.push(`VFC ${hrv} ms, por debajo de tu rango (${lo}–${hi})`);
+        }
+        else if (hrv < lo + (hi - lo) * 0.25) {
+            pts += 1;
+            reasons.push(`VFC ${hrv} ms, en el borde bajo de tu rango`);
+        }
+        else
+            reasons.push(`VFC ${hrv} ms, dentro de tu rango`);
+    }
+    else if (day.hrv_status && day.hrv_status !== "BALANCED") {
+        pts += 2;
+        reasons.push(`estado VFC: ${day.hrv_status.toLowerCase()}`);
+    }
+    if (day.sleep_hours != null) {
+        const h = day.sleep_hours.toFixed(1).replace(".", ",");
+        if (day.sleep_hours < 6) {
+            pts += 2;
+            reasons.push(`solo ${h} h de sueño`);
+        }
+        else if (day.sleep_hours < 7) {
+            pts += 1;
+            reasons.push(`sueño corto (${h} h)`);
+        }
+        else
+            reasons.push(`${h} h de sueño`);
+    }
+    const prevRhr = history.filter((d) => d.date < day.date && d.rhr != null).slice(0, 7).map((d) => d.rhr);
+    if (day.rhr != null && prevRhr.length >= 3) {
+        const avg = prevRhr.reduce((a, b) => a + b, 0) / prevRhr.length;
+        const diff = Math.round(day.rhr - avg);
+        if (diff >= 5) {
+            pts += 2;
+            reasons.push(`FC reposo +${diff} sobre tu media`);
+        }
+        else if (diff >= 3) {
+            pts += 1;
+            reasons.push(`FC reposo algo alta (+${diff})`);
+        }
+    }
+    if (day.readiness != null) {
+        if (day.readiness < 25)
+            pts += 2;
+        else if (day.readiness < 50)
+            pts += 1;
+    }
+    if (day.bb_high != null && day.bb_high < 40) {
+        pts += 1;
+        reasons.push(`Body Battery bajo (${day.bb_high})`);
+    }
+    if (pts <= 1)
+        return { level: "verde", label: "Listo para calidad", reasons };
+    if (pts <= 3)
+        return { level: "ambar", label: "Mejor suave", reasons };
+    return { level: "rojo", label: "Descanso o muy suave", reasons };
+}
+function HrvTrendChart({ days }) {
+    // days: más antiguo primero
+    const pts = days.filter((d) => d.hrv_avg != null);
+    if (pts.length < 2)
+        return null;
+    const last = pts[pts.length - 1];
+    const lo = last.hrv_low, hi = last.hrv_high;
+    const vals = pts.map((d) => d.hrv_avg).concat(lo != null ? [lo, hi] : []);
+    const min = Math.min(...vals) - 3, max = Math.max(...vals) + 3;
+    const W = 320, H = 90, padX = 6, padY = 8;
+    const x = (i) => padX + (i / (pts.length - 1)) * (W - padX * 2);
+    const y = (v) => padY + (1 - (v - min) / (max - min)) * (H - padY * 2);
+    const line = pts.map((d, i) => `${x(i)},${y(d.hrv_avg)}`).join(" ");
+    return React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: 90 } },
+        lo != null && React.createElement("rect", { x: padX, y: y(hi), width: W - padX * 2, height: y(lo) - y(hi), fill: "#4A8B8C", opacity: 0.15, rx: 4 }),
+        React.createElement("polyline", { points: line, fill: "none", stroke: "#7FA9AA", strokeWidth: 1.8, strokeLinejoin: "round", strokeLinecap: "round" }),
+        pts.map((d, i) => React.createElement("circle", { key: d.date, cx: x(i), cy: y(d.hrv_avg), r: i === pts.length - 1 ? 4 : 2.5, fill: lo != null && d.hrv_avg < lo ? "#E8453C" : i === pts.length - 1 ? "#FF6B35" : "#7FA9AA" })));
+}
+function SleepBars({ days }) {
+    const pts = days.filter((d) => d.sleep_hours != null);
+    if (!pts.length)
+        return null;
+    return React.createElement("div", { className: "flex items-end gap-1 h-14" }, pts.map((d) => {
+        const h = Math.max(4, Math.min(100, (d.sleep_hours / 9) * 100));
+        const color = d.sleep_hours < 6 ? "#E8453C" : d.sleep_hours < 7 ? "#E8C547" : "#4A8B8C";
+        return React.createElement("div", { key: d.date, title: `${fmtDate(d.date)} · ${d.sleep_hours.toFixed(1)} h`, className: "flex-1 rounded-sm", style: { height: `${h}%`, background: color, opacity: 0.85 } });
+    }));
+}
+function timeAgo(iso) {
+    if (!iso)
+        return "";
+    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (min < 60)
+        return `hace ${Math.max(1, min)} min`;
+    const h = Math.round(min / 60);
+    if (h < 48)
+        return `hace ${h} h`;
+    return `hace ${Math.round(h / 24)} días`;
+}
+function RecoveryPanel() {
+    const [data, setData] = useState(null);
+    const [error, setError] = useState("");
+    useEffect(() => {
+        fetch("/api/wellness", { headers: authHeaders() })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+            .then(setData)
+            .catch((e) => setError(e.message));
+    }, []);
+    const card = (children) => React.createElement("div", { id: "recuperacion", className: "my-10 scroll-mt-20" },
+        React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2] mb-3" }, "Recuperación de hoy"),
+        React.createElement("div", { className: "bg-[#0E2634] border border-[#1E3D4F] rounded-2xl p-4 shadow-[0_8px_28px_-6px_rgba(0,0,0,0.45)]" }, children));
+    if (error)
+        return card(React.createElement("div", { className: "text-[11px] font-mono text-[#7FA9AA]" }, "No se pudieron cargar los datos de Garmin (", error, ")."));
+    if (!data)
+        return card(React.createElement("div", { className: "text-[11px] font-mono text-[#5A7A87]" }, "cargando datos de Garmin…"));
+    const days = data.days || [];
+    if (!days.length)
+        return card(React.createElement("div", { className: "text-[11px] font-mono text-[#7FA9AA]" }, "Sin datos de Garmin todavía. Instala scripts/garmin_sync.py en tu Mac (ver README)."));
+    const today = todayStr();
+    const day = days[0];
+    const v = recoveryVerdict(day, days);
+    const color = RECOVERY_COLORS[v.level];
+    const prevRhr = days.filter((d) => d.date < day.date && d.rhr != null).slice(0, 7).map((d) => d.rhr);
+    const rhrAvg = prevRhr.length ? Math.round(prevRhr.reduce((a, b) => a + b, 0) / prevRhr.length) : null;
+    const stale = data.synced_at && Date.now() - new Date(data.synced_at).getTime() > 36 * 3600 * 1000;
+    const last14 = days.slice(0, 14).reverse();
+    const tile = (label, value, sub) => React.createElement("div", { className: "bg-[#0B1F2E] border border-[#1E3D4F] rounded-lg px-3 py-2" },
+        React.createElement("div", { className: "font-mono text-[#5A7A87] text-[10px] uppercase" }, label),
+        React.createElement("div", { className: "font-display text-[#EAF2F2] text-xl leading-tight tabular-nums" }, value ?? "—"),
+        sub && React.createElement("div", { className: "text-[10px] text-[#7FA9AA] font-mono" }, sub));
+    return card(React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "flex items-center gap-3 mb-2" },
+            React.createElement("span", { className: "w-3.5 h-3.5 rounded-full shrink-0", style: { background: color, boxShadow: `0 0 14px ${color}` } }),
+            React.createElement("div", { className: "font-display text-2xl uppercase tracking-wide", style: { color } }, v.label)),
+        React.createElement("div", { className: "text-[11px] font-mono text-[#9FB8C4] mb-4" }, v.reasons.join(" · "), day.date !== today ? ` — datos del ${fmtDate(day.date)}` : ""),
+        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4" },
+            tile("VFC noche", day.hrv_avg != null ? `${day.hrv_avg} ms` : null, day.hrv_low != null ? `rango ${day.hrv_low}–${day.hrv_high} · sem. ${day.hrv_weekly ?? "—"}` : null),
+            tile("Sueño", day.sleep_hours != null ? `${day.sleep_hours.toFixed(1).replace(".", ",")} h` : null, day.sleep_score != null ? `puntuación ${day.sleep_score}${day.deep_pct != null ? ` · prof. ${Math.round(day.deep_pct)}%` : ""}` : null),
+            tile("FC reposo", day.rhr != null ? `${day.rhr} ppm` : null, rhrAvg != null ? `media 7 d: ${rhrAvg}` : null),
+            day.readiness != null
+                ? tile("Disposición", day.readiness, day.bb_high != null ? `Body Battery ${day.bb_high}` : null)
+                : tile("Body Battery", day.bb_high, day.bb_low != null ? `mín. ${day.bb_low}` : null)),
+        React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
+            React.createElement("div", null,
+                React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "VFC 14 días · banda = tu rango normal"),
+                React.createElement(HrvTrendChart, { days: last14 })),
+            React.createElement("div", null,
+                React.createElement("div", { className: "font-mono text-[10px] uppercase text-[#5A7A87] mb-1" }, "Sueño 14 días"),
+                React.createElement(SleepBars, { days: last14 }))),
+        React.createElement("div", { className: `mt-3 text-[10px] font-mono ${stale ? "text-[#E8C547]" : "text-[#5A7A87]"}` }, "Garmin · sincronizado ", timeAgo(data.synced_at), stale ? " — ¿está el Mac encendido?" : "")));
+}
 function SwimCoach() {
     const [sessions, setSessions] = useState([]);
     const [loaded, setLoaded] = useState(false);
@@ -1448,7 +1605,7 @@ function SwimCoach() {
     // currently in view instead of a static list of links. ----------------
     const [activeSection, setActiveSection] = useState("temporada");
     useEffect(() => {
-        const ids = ["temporada", "prediccion", "calendario", "registro", "natacion"];
+        const ids = ["recuperacion", "temporada", "prediccion", "calendario", "registro", "natacion"];
         const els = ids.map((id) => document.getElementById(id)).filter(Boolean);
         if (els.length === 0)
             return;
@@ -1624,6 +1781,7 @@ function SwimCoach() {
                         syncing ? "sincronizando..." : "sincronizar Strava"),
                     syncMsg && React.createElement("span", { className: "text-[10px] font-mono text-[#7FA9AA]" }, syncMsg))),
             React.createElement("div", { className: "sticky top-0 z-30 flex gap-3 overflow-x-auto scroll-fade mb-6 py-3 -mx-5 px-5 backdrop-blur-md bg-[#0B1F2E]/85 border-b border-[#1E3D4F]/70" }, [
+                ["#recuperacion", "Recuperación", "recuperacion"],
                 ["#temporada", "Temporada", "temporada"],
                 ["#prediccion", "Predicción", "prediccion"],
                 ["#calendario", "Volumen", "calendario"],
@@ -1631,6 +1789,7 @@ function SwimCoach() {
                 ["#natacion", "Natación", "natacion"],
             ].map(([href, label, id]) => React.createElement("a", { key: href, href: href, className: `shrink-0 font-mono text-[10px] uppercase tracking-wide transition-colors border-b pb-0.5 ${activeSection === id ? "text-[#FF6B35] border-[#FF6B35]" : "text-[#7FA9AA] hover:text-[#4A8B8C] border-transparent hover:border-[#4A8B8C]"}` }, label))),
             React.createElement(CurrentBlockHero, null),
+            React.createElement(RecoveryPanel, null),
             React.createElement(WaveDivider, null),
             React.createElement("div", { id: "temporada", className: "my-12 scroll-mt-20" },
                 React.createElement("div", { className: "font-display uppercase text-[15px] tracking-[0.08em] text-[#EAF2F2] mb-3" }, "Temporada 2026–27 — bloques"),
