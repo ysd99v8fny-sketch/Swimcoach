@@ -104,3 +104,18 @@ Igual que antes: abre la URL de Vercel en Safari → Compartir → "Añadir a pa
 ## Actualizar la app más adelante
 
 Pídeme cambios como siempre en el chat — te doy los archivos actualizados, los subes a tu repositorio de GitHub y Vercel despliega la nueva versión solo.
+
+## Recuperación (Garmin)
+
+Garmin no ofrece una API personal fiable desde la nube, así que el Mac hace de puente:
+
+```
+reloj → Garmin Connect → scripts/garmin_sync.py (Mac, launchd cada 3 h) → POST /api/wellness → Redis → panel "Recuperación de hoy"
+```
+
+- `api/wellness.js` / `lib/wellness.js`: guarda por día VFC (media noche, semanal, rango normal), sueño (horas, puntuación, % profundo/REM), FC en reposo, Body Battery y disposición para entrenar. Últimos 120 días, clave Redis `wellness:days`. GET y POST exigen `x-app-secret`.
+- `scripts/garmin_sync.py`: reutiliza la sesión OAuth de `~/.garminconnect` (la misma que usa el conector Garmin de Claude, creada con `garmin-mcp-auth`). No guarda la contraseña de Garmin.
+- Instalación en el Mac (una vez):
+  `curl -fsSL https://raw.githubusercontent.com/ysd99v8fny-sketch/Swimcoach/main/swim-coach-full-app/scripts/install_garmin_sync.sh | bash`
+- Registro: `~/.swimcoach/sync.log`. Si la sesión de Garmin caduca, vuelve a ejecutar `garmin-mcp-auth`.
+- Semáforo: VFC por debajo del rango (+2) o en su cuarto inferior (+1), sueño < 6 h (+2) o < 7 h (+1), FC reposo ≥ +5 (+2) o ≥ +3 (+1) sobre la media de 7 días, disposición < 25 (+2) o < 50 (+1), Body Battery máx. < 40 (+1). 0–1 verde, 2–3 ámbar, ≥ 4 rojo.
